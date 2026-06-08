@@ -60,11 +60,6 @@ export default async function Report() {
     counts[r.stage] = (counts[r.stage] || 0) + 1;
   });
 
-  const byStage = STAGE_ORDER.map((stage) => ({
-    stage,
-    roles: roleStats.filter((r) => r.stage === stage),
-  })).filter((g) => g.roles.length > 0);
-
   const kpiCard = {
     flex: "1 1 120px",
     background: "#fdf2f8",
@@ -165,36 +160,6 @@ export default async function Report() {
             </div>
           ))}
         </div>
-
-        {/* Roles by stage */}
-        <h2 style={{ fontSize: "1.1rem", color: PINK_DARK, margin: "0 0 0.75rem" }}>
-          Roles by stage
-        </h2>
-        {byStage.length === 0 ? (
-          <p style={{ color: "#6b7280", marginBottom: "2rem" }}>No roles yet.</p>
-        ) : (
-          <div style={{ marginBottom: "2rem" }}>
-            {byStage.map((g) => (
-              <div
-                key={g.stage}
-                style={{
-                  display: "flex",
-                  gap: "0.6rem",
-                  padding: "0.5rem 0",
-                  borderBottom: "1px solid #f3e8ee",
-                  fontSize: "0.92rem",
-                }}
-              >
-                <div style={{ minWidth: "150px", fontWeight: 700, color: PINK_DARK }}>
-                  {STAGE_ICON[g.stage]} {g.stage} ({g.roles.length})
-                </div>
-                <div style={{ color: "#374151" }}>
-                  {g.roles.map((r) => r.name).join(", ")}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* Roles overview */}
         <h2 style={{ fontSize: "1.1rem", color: PINK_DARK, margin: "0 0 0.75rem" }}>
