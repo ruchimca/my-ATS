@@ -2,8 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
-import { processResume } from "./actions";
+import { uploadResume } from "./actions";
 
 const PINK = "#db2777";
 const PINK_DARK = "#9d174d";
@@ -46,19 +45,17 @@ export default function UploadResumes() {
     for (let i = 0; i < resumes.length; i++) {
       const file = resumes[i];
       try {
-        const blob = await upload(`resumes/${file.name}`, file, {
-          access: "public",
-          handleUploadUrl: "/api/upload",
-        });
-        const result = await processResume({
-          url: blob.url,
-          filename: file.name,
-          contentType: file.type,
-        });
-        setLog((l) => [
-          ...l,
-          { name: result?.name || file.name, ok: true },
-        ]);
+        const fd = new FormData();
+        fd.append("file", file);
+        const result = await uploadResume(fd);
+        if (result?.ok) {
+          setLog((l) => [...l, { name: result.name || file.name, ok: true }]);
+        } else {
+          setLog((l) => [
+            ...l,
+            { name: file.name, ok: false, msg: result?.error || "failed" },
+          ]);
+        }
       } catch (err) {
         setLog((l) => [
           ...l,

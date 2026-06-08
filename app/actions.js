@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { put } from "@vercel/blob";
 import Anthropic from "@anthropic-ai/sdk";
 import { addCandidateRow, deleteCandidateRow } from "../lib/db";
 import { STAGES } from "../lib/stages";
@@ -95,40 +96,61 @@ async function extractFromPdf(base64) {
   return toolUse ? toolUse.input : null;
 }
 
-// Called once per uploaded resume file (from the browser, after the file has
-// been stored in Vercel Blob). Reads the PDF with AI when possible, otherwise
-// falls back to the file name, then saves the candidate.
-export async function processResume({ url, filename, contentType }) {
-  let name = filenameToName(filename);
-  let email = null;
-  let role = null;
-
-  const isPdf =
-    contentType === "application/pdf" || /\.pdf$/i.test(filename || "");
-
-  if (isPdf && process.env.ANTHROPIC_API_KEY) {
-    try {
-      const res = await fetch(url);
-      const buf = Buffer.from(await res.arrayBuffer());
-      const data = await extractFromPdf(buf.toString("base64"));
-      if (data) {
-        if (data.name && data.name.trim()) name = data.name.trim();
-        if (data.email && data.email.trim()) email = data.email.trim();
-        if (data.role && data.role.trim()) role = data.role.trim();
-      }
-    } catch (e) {
-      // AI read failed (no key, bad PDF, etc.) — keep the file-name fallback.
-    }
+// Called once per resume. The browser posts the file to this server action,
+// which (1) stores it in Vercel Blob, (2) reads the PDF with AI when possible
+// (otherwise falls back to the file name), and (3) saves the candidate.
+// Uploading server-side works with an OIDC-connected Blob store (no static
+// BLOB_READ_WRITE_TOKEN required, unlike browser uploads).
+export async function uploadResume(formData) {
+  const file = formData.get("file");
+  if (!file || typeof file === "string") {
+    return { ok: false, error: "No file received." };
   }
 
-  await addCandidateRow({
-    name,
-    role,
-    stage: "Applied",
-    notes: null,
-    email,
-    resumeUrl: url,
-  });
-  revalidatePath("/");
-  return { name };
+  const filename = file.name || "resume";
+  const contentType = file.type || "";
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // 1. Store the file.
+    const { url } = await put(`resumes/${filename}`, buffer, {
+      access: "public",
+      addRandomSuffix: true,
+      contentType: contentType || undefined,
+    });
+
+    // 2. Extract fields.
+    let name = filenameToName(filename);
+    let email = null;
+    let role = null;
+
+    const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(filename);
+    if (isPdf && process.env.ANTHROPIC_API_KEY) {
+      try {
+        const data = await extractFromPdf(buffer.toString("base64"));
+        if (data) {
+          if (data.name && data.name.trim()) name = data.name.trim();
+          if (data.email && data.email.trim()) email = data.email.trim();
+          if (data.role && data.role.trim()) role = data.role.trim();
+        }
+      } catch (e) {
+        // AI read failed — keep the file-name fallback.
+      }
+    }
+
+    // 3. Save the candidate.
+    await addCandidateRow({
+      name,
+      role,
+      stage: "Applied",
+      notes: null,
+      email,
+      resumeUrl: url,
+    });
+    revalidatePath("/");
+    return { ok: true, name };
+  } catch (e) {
+    return { ok: false, error: e?.message || "Upload failed." };
+  }
 }
