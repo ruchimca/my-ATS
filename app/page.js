@@ -2,6 +2,7 @@ import { getCandidates, isDbConfigured, getActiveJobDescription } from "../lib/d
 import { deleteCandidate } from "./actions";
 import UploadResumes from "./UploadResumes";
 import JobDescription from "./JobDescription";
+import DeleteButton from "./DeleteButton";
 
 // Always read fresh data from the database on each request.
 export const dynamic = "force-dynamic";
@@ -234,21 +235,7 @@ export default async function Home() {
                     </span>
                     <form action={deleteCandidate}>
                       <input type="hidden" name="id" value={c.id} />
-                      <button
-                        type="submit"
-                        title="Delete candidate"
-                        style={{
-                          background: "transparent",
-                          border: "none",
-                          color: "#d1d5db",
-                          cursor: "pointer",
-                          fontSize: "1.1rem",
-                          lineHeight: 1,
-                          padding: "0.2rem",
-                        }}
-                      >
-                        ✕
-                      </button>
+                      <DeleteButton />
                     </form>
                   </div>
                 );

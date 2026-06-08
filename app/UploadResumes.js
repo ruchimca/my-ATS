@@ -16,8 +16,9 @@ export default function UploadResumes() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [log, setLog] = useState([]);
-  const [error, setError] = useState("");
+  const [imported, setImported] = useState(null); // count after a run finishes
+  const [issues, setIssues] = useState([]); // [{ msg, error: bool }]
+  const [topError, setTopError] = useState("");
 
   // Set the folder-picker attributes the JSX prop names don't cover.
   function setFolderInput(el) {
@@ -29,18 +30,23 @@ export default function UploadResumes() {
   }
 
   async function handleFiles(e) {
-    setError("");
+    setTopError("");
+    setIssues([]);
+    setImported(null);
+
     const all = Array.from(e.target.files || []);
     const resumes = all.filter(isResume);
 
     if (resumes.length === 0) {
-      setError("No PDF or Word resumes found in that folder.");
+      setTopError("No PDF or Word resumes found in that folder.");
       return;
     }
 
     setBusy(true);
     setProgress({ done: 0, total: resumes.length });
-    setLog([]);
+
+    let ok = 0;
+    const found = [];
 
     for (let i = 0; i < resumes.length; i++) {
       const file = resumes[i];
@@ -49,29 +55,39 @@ export default function UploadResumes() {
         fd.append("file", file);
         const result = await uploadResume(fd);
         if (result?.ok) {
-          setLog((l) => [
-            ...l,
-            { name: result.name || file.name, ok: true, msg: result.aiError },
-          ]);
+          ok += 1;
+          if (result.aiError) found.push({ msg: result.aiError, error: false });
         } else {
-          setLog((l) => [
-            ...l,
-            { name: file.name, ok: false, msg: result?.error || "failed" },
-          ]);
+          found.push({ msg: result?.error || "Upload failed", error: true });
         }
       } catch (err) {
-        setLog((l) => [
-          ...l,
-          { name: file.name, ok: false, msg: err?.message || "failed" },
-        ]);
+        found.push({ msg: err?.message || "Upload failed", error: true });
       }
       setProgress({ done: i + 1, total: resumes.length });
     }
 
+    setImported(ok);
+    setIssues(found);
     setBusy(false);
     if (inputRef.current) inputRef.current.value = "";
     router.refresh();
   }
+
+  const pct =
+    progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+
+  // Group repeated messages so the box stays compact.
+  const grouped = [];
+  const seen = new Map();
+  for (const it of issues) {
+    if (seen.has(it.msg)) {
+      grouped[seen.get(it.msg)].count += 1;
+    } else {
+      seen.set(it.msg, grouped.length);
+      grouped.push({ msg: it.msg, error: it.error, count: 1 });
+    }
+  }
+  const errorCount = issues.filter((i) => i.error).length;
 
   return (
     <section
@@ -88,8 +104,8 @@ export default function UploadResumes() {
         Import a folder of resumes
       </h2>
       <p style={{ margin: "0 0 1rem", color: "#6b7280", fontSize: "0.9rem" }}>
-        Pick a folder of resumes (PDF or Word). Each one is saved, and the AI
-        reads PDFs to fill in the name, email, and role automatically.
+        Pick a folder of resumes (PDF works best). Each one is saved and read by
+        the AI to fill in the name, email, role, and fit score.
       </p>
 
       <input
@@ -115,40 +131,103 @@ export default function UploadResumes() {
           cursor: busy ? "default" : "pointer",
         }}
       >
-        {busy
-          ? `Importing ${progress.done}/${progress.total}…`
-          : "📁 Choose a folder of resumes"}
+        {busy ? "Importing…" : "📁 Choose a folder of resumes"}
       </label>
 
-      {error ? (
-        <p style={{ color: "#991b1b", marginTop: "0.75rem", fontSize: "0.9rem" }}>
-          {error}
+      {/* Progress while importing */}
+      {busy ? (
+        <div style={{ marginTop: "1rem" }}>
+          <div
+            style={{
+              fontSize: "0.9rem",
+              color: PINK_DARK,
+              fontWeight: 600,
+              marginBottom: "0.4rem",
+            }}
+          >
+            Importing {progress.done} of {progress.total}…
+          </div>
+          <div
+            style={{
+              height: "8px",
+              background: "#fce7f3",
+              borderRadius: "4px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${pct}%`,
+                background: PINK,
+                transition: "width 0.2s ease",
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Summary after a finished run */}
+      {!busy && imported != null ? (
+        <p
+          style={{
+            marginTop: "1rem",
+            fontSize: "0.95rem",
+            fontWeight: 600,
+            color: "#166534",
+          }}
+        >
+          ✓ Imported {imported} of {progress.total} resume
+          {progress.total === 1 ? "" : "s"}.
         </p>
       ) : null}
 
-      {log.length > 0 ? (
-        <ul
+      {/* No resumes found */}
+      {topError ? (
+        <p style={{ color: "#991b1b", marginTop: "0.75rem", fontSize: "0.9rem" }}>
+          {topError}
+        </p>
+      ) : null}
+
+      {/* Errors / warnings box */}
+      {grouped.length > 0 ? (
+        <div
           style={{
             marginTop: "1rem",
-            paddingLeft: "1.1rem",
-            fontSize: "0.85rem",
-            color: "#374151",
-            maxHeight: "180px",
-            overflowY: "auto",
+            border: `1px solid ${errorCount ? "#fca5a5" : "#fcd34d"}`,
+            background: errorCount ? "#fef2f2" : "#fffbeb",
+            borderRadius: "10px",
+            padding: "0.85rem 1rem",
           }}
         >
-          {log.map((item, i) => (
-            <li
-              key={i}
-              style={{
-                color: !item.ok ? "#991b1b" : item.msg ? "#92400e" : "#166534",
-              }}
-            >
-              {item.ok ? "✓" : "✕"} {item.name}
-              {item.msg ? ` — ${item.msg}` : ""}
-            </li>
-          ))}
-        </ul>
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              color: errorCount ? "#991b1b" : "#92400e",
+              marginBottom: "0.4rem",
+            }}
+          >
+            {errorCount
+              ? `${errorCount} resume${errorCount === 1 ? "" : "s"} had a problem`
+              : "Some resumes need attention"}
+          </div>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: "1.1rem",
+              fontSize: "0.82rem",
+              color: "#374151",
+            }}
+          >
+            {grouped.map((g, i) => (
+              <li key={i} style={{ color: g.error ? "#991b1b" : "#92400e" }}>
+                {g.msg}
+                {g.count > 1 ? ` (×${g.count})` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </section>
   );
