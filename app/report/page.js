@@ -147,18 +147,47 @@ export default async function Report() {
             marginBottom: "2rem",
           }}
         >
-          <div style={kpiCard}>
-            <div style={kpiNum}>{roleStats.length}</div>
-            <div style={kpiLabel}>Total roles</div>
-          </div>
-          {STAGE_ORDER.map((stage) => (
-            <div key={stage} style={kpiCard}>
-              <div style={kpiNum}>{counts[stage] || 0}</div>
-              <div style={kpiLabel}>
-                {STAGE_ICON[stage]} {stage}
-              </div>
+          <div
+            style={{ ...kpiCard, background: "#db2777", border: "1px solid #db2777" }}
+          >
+            <div style={{ ...kpiNum, color: "#fff", fontSize: "2.2rem" }}>
+              {roleStats.length}
             </div>
-          ))}
+            <div style={{ ...kpiLabel, color: "#fce7f3", fontWeight: 700 }}>
+              Total roles
+            </div>
+          </div>
+          {STAGE_ORDER.map((stage) => {
+            const filled = stage === "Filled";
+            return (
+              <div
+                key={stage}
+                style={{
+                  ...kpiCard,
+                  ...(filled
+                    ? { background: "#dcfce7", border: "1px solid #86efac" }
+                    : {}),
+                }}
+              >
+                <div
+                  style={{
+                    ...kpiNum,
+                    ...(filled ? { color: "#166534", fontSize: "2.2rem" } : {}),
+                  }}
+                >
+                  {counts[stage] || 0}
+                </div>
+                <div
+                  style={{
+                    ...kpiLabel,
+                    ...(filled ? { color: "#166534", fontWeight: 700 } : {}),
+                  }}
+                >
+                  {STAGE_ICON[stage]} {stage}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Roles overview */}
