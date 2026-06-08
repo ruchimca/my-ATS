@@ -8,11 +8,7 @@ const PINK = "#db2777";
 const PINK_DARK = "#9d174d";
 
 function jobLabel(j) {
-  const d = new Date(j.created_at);
-  const when = isNaN(d.getTime())
-    ? ""
-    : ` — ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
-  return `${j.filename || `Job #${j.id}`}${when}`;
+  return j.filename || `Job #${j.id}`;
 }
 
 export default function JobDescription({ jobs = [], current }) {

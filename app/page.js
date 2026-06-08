@@ -65,13 +65,40 @@ export default async function Home() {
       }}
     >
       <div style={{ maxWidth: "1280px", margin: "0 auto" }}>
-        <header style={{ marginBottom: "1.5rem" }}>
-          <h1 style={{ fontSize: "2rem", margin: 0, color: PINK_DARK }}>
-            my-ATS 💗
-          </h1>
-          <p style={{ margin: "0.4rem 0 0", color: "#6b7280" }}>
-            Pick a job, import resumes, see the best fits ranked.
-          </p>
+        <header
+          style={{
+            marginBottom: "1.5rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-end",
+            gap: "1rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <h1 style={{ fontSize: "2rem", margin: 0, color: PINK_DARK }}>
+              my-ATS 💗
+            </h1>
+            <p style={{ margin: "0.4rem 0 0", color: "#6b7280" }}>
+              Pick a job, import resumes, see the best fits ranked.
+            </p>
+          </div>
+          <a
+            href="/report"
+            style={{
+              background: "#fff",
+              color: PINK_DARK,
+              border: "1px solid #f9a8d4",
+              borderRadius: "8px",
+              padding: "0.6rem 1.1rem",
+              fontSize: "0.95rem",
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            📊 Executive report
+          </a>
         </header>
 
         {!configured || dbError ? (
@@ -157,6 +184,8 @@ export default async function Home() {
                     <tr style={{ background: "#fdf2f8", textAlign: "left" }}>
                       <th style={th}>Fit</th>
                       <th style={th}>Name</th>
+                      <th style={th}>Title</th>
+                      <th style={th}>Why a great fit</th>
                       <th style={th}>Email</th>
                       <th style={th}>Phone</th>
                       <th style={th}>Location</th>
@@ -193,15 +222,14 @@ export default async function Home() {
                               <span style={{ color: "#d1d5db" }}>—</span>
                             )}
                           </td>
-                          <td style={{ ...td, minWidth: "150px" }}>
-                            <div style={{ fontWeight: 600 }}>{c.name}</div>
-                            {c.role ? (
-                              <div
-                                style={{ fontSize: "0.78rem", color: "#9ca3af" }}
-                              >
-                                {c.role}
-                              </div>
-                            ) : null}
+                          <td style={{ ...td, minWidth: "120px", fontWeight: 600 }}>
+                            {c.name}
+                          </td>
+                          <td style={{ ...td, minWidth: "140px", maxWidth: "190px" }}>
+                            {c.role || ""}
+                          </td>
+                          <td style={{ ...td, minWidth: "200px", maxWidth: "280px" }}>
+                            {c.fit_reason || ""}
                           </td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>
                             {c.email || ""}
