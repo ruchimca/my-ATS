@@ -29,6 +29,7 @@ const ALL_COLUMNS = [
   { key: "fit", label: "Fit" },
   { key: "status", label: "Status" },
   { key: "name", label: "Name" },
+  { key: "actions", label: "Resume / Delete" },
   { key: "title", label: "Title" },
   { key: "email", label: "Email" },
   { key: "phone", label: "Phone" },
@@ -38,7 +39,7 @@ const ALL_COLUMNS = [
   { key: "whyFit", label: "Why a great fit" },
 ];
 const DEFAULT_CONFIG = ALL_COLUMNS.map((c) => ({ key: c.key, visible: true }));
-const STORAGE_KEY = "ats_columns_v2";
+const STORAGE_KEY = "ats_columns_v3";
 
 function labelFor(key) {
   return ALL_COLUMNS.find((c) => c.key === key)?.label || key;
@@ -80,7 +81,8 @@ function tdStyle(key) {
   if (key === "title") return { ...tdBase, minWidth: "140px", maxWidth: "190px" };
   if (key === "whyFit") return { ...tdBase, minWidth: "200px", maxWidth: "300px" };
   if (key === "name") return { ...tdBase, minWidth: "120px", fontWeight: 600 };
-  if (["email", "phone"].includes(key)) return { ...tdBase, whiteSpace: "nowrap" };
+  if (["email", "phone", "actions"].includes(key))
+    return { ...tdBase, whiteSpace: "nowrap" };
   return tdBase;
 }
 
@@ -195,6 +197,37 @@ export default function CandidateList({ candidates, hasJob }) {
         return c.citizenship || "";
       case "whyFit":
         return c.fit_reason || "";
+      case "actions":
+        return (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.35rem",
+              alignItems: "flex-start",
+            }}
+          >
+            {c.resume_url ? (
+              <a
+                href={c.resume_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: "0.8rem",
+                  color: PINK,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                Resume ↗
+              </a>
+            ) : null}
+            <form action={deleteCandidate}>
+              <input type="hidden" name="id" value={c.id} />
+              <DeleteButton />
+            </form>
+          </div>
+        );
       default:
         return "";
     }
@@ -373,10 +406,9 @@ export default function CandidateList({ candidates, hasJob }) {
               <tr style={{ background: "#fdf2f8" }}>
                 {visibleCols.map((vc) => (
                   <th key={vc.key} style={th}>
-                    {labelFor(vc.key)}
+                    {vc.key === "actions" ? "" : labelFor(vc.key)}
                   </th>
                 ))}
-                <th style={th}></th>
               </tr>
             </thead>
             <tbody>
@@ -387,36 +419,6 @@ export default function CandidateList({ candidates, hasJob }) {
                       {renderCell(vc.key, c)}
                     </td>
                   ))}
-                  <td style={{ ...tdBase, whiteSpace: "nowrap" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "0.35rem",
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      {c.resume_url ? (
-                        <a
-                          href={c.resume_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            fontSize: "0.8rem",
-                            color: PINK,
-                            fontWeight: 600,
-                            textDecoration: "none",
-                          }}
-                        >
-                          Resume ↗
-                        </a>
-                      ) : null}
-                      <form action={deleteCandidate}>
-                        <input type="hidden" name="id" value={c.id} />
-                        <DeleteButton />
-                      </form>
-                    </div>
-                  </td>
                 </tr>
               ))}
             </tbody>
