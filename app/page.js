@@ -1,6 +1,7 @@
 import { getCandidates, isDbConfigured } from "../lib/db";
 import { addCandidate, deleteCandidate } from "./actions";
 import { STAGES } from "../lib/stages";
+import UploadResumes from "./UploadResumes";
 
 // Always read fresh data from the database on each request.
 export const dynamic = "force-dynamic";
@@ -98,6 +99,9 @@ export default async function Home() {
             </p>
           </div>
         ) : null}
+
+        {/* Bulk import resumes from a folder */}
+        <UploadResumes />
 
         {/* Add candidate form */}
         <section
@@ -255,9 +259,26 @@ export default async function Home() {
                         }}
                       >
                         {c.role || "—"}
+                        {c.email ? ` · ${c.email}` : ""}
                         {c.notes ? ` · ${c.notes}` : ""}
                       </div>
                     </div>
+                    {c.resume_url ? (
+                      <a
+                        href={c.resume_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: "0.8rem",
+                          color: PINK,
+                          fontWeight: 600,
+                          textDecoration: "none",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Resume ↗
+                      </a>
+                    ) : null}
                     <span
                       style={{
                         background: badge.bg,
