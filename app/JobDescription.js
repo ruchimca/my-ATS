@@ -91,7 +91,7 @@ export default function JobDescription({ jobs = [], current }) {
         Job description
       </h2>
 
-      {jobs.length > 0 ? (
+      {jobs.length >= 2 ? (
         <div style={{ marginBottom: "0.85rem" }}>
           <label
             style={{
@@ -127,6 +127,22 @@ export default function JobDescription({ jobs = [], current }) {
           </select>
           <div style={{ fontSize: "0.78rem", color: "#9ca3af", marginTop: "0.3rem" }}>
             Switch between jobs here, or add a new one below.
+          </div>
+        </div>
+      ) : jobs.length === 1 ? (
+        <div style={{ marginBottom: "0.85rem" }}>
+          <div
+            style={{
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              color: PINK_DARK,
+              marginBottom: "0.2rem",
+            }}
+          >
+            Current job
+          </div>
+          <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#1f2937" }}>
+            {current?.filename || jobs[0].filename || "job description"}
           </div>
         </div>
       ) : (

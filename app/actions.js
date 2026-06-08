@@ -7,6 +7,7 @@ import mammoth from "mammoth";
 import {
   addCandidateRow,
   deleteCandidateRow,
+  updateCandidateStage,
   getActiveJobDescription,
   saveJobDescription,
   setActiveJobById,
@@ -17,6 +18,15 @@ export async function deleteCandidate(formData) {
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) {
     await deleteCandidateRow(id);
+    revalidatePath("/");
+  }
+}
+
+export async function updateStage(formData) {
+  const id = Number(formData.get("id"));
+  const stage = (formData.get("stage") || "").toString();
+  if (Number.isInteger(id) && STAGES.includes(stage)) {
+    await updateCandidateStage(id, stage);
     revalidatePath("/");
   }
 }
