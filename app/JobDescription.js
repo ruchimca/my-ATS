@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { uploadJobDescription, setActiveJob, deleteJob } from "./actions";
 
@@ -19,16 +19,24 @@ export default function JobDescription({ jobs = [], current }) {
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [copied, setCopied] = useState(false);
+  const [applyUrl, setApplyUrl] = useState("");
+
+  useEffect(() => {
+    if (current) {
+      setApplyUrl(`${window.location.origin}/apply/${current.id}`);
+    } else {
+      setApplyUrl("");
+    }
+  }, [current?.id]);
 
   async function copyApplyLink() {
-    if (!current) return;
-    const url = `${window.location.origin}/apply/${current.id}`;
+    if (!applyUrl) return;
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(applyUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (e) {
-      window.prompt("Copy this application link:", url);
+      window.prompt("Copy this application link:", applyUrl);
     }
   }
 
@@ -220,24 +228,6 @@ export default function JobDescription({ jobs = [], current }) {
         {current ? (
           <button
             type="button"
-            onClick={copyApplyLink}
-            style={{
-              background: copied ? "#dcfce7" : "#fff",
-              color: copied ? "#166534" : PINK_DARK,
-              border: `1px solid ${copied ? "#86efac" : "#f9a8d4"}`,
-              borderRadius: "8px",
-              padding: "0.55rem 0.9rem",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {copied ? "✓ Copied!" : "🔗 Copy application link"}
-          </button>
-        ) : null}
-        {current ? (
-          <button
-            type="button"
             onClick={handleDeleteJob}
             disabled={switching || busy}
             style={{
@@ -255,6 +245,54 @@ export default function JobDescription({ jobs = [], current }) {
           </button>
         ) : null}
       </div>
+
+      {/* Public application link to share with applicants */}
+      {current ? (
+        <div style={{ marginTop: "1rem" }}>
+          <div
+            style={{ fontSize: "0.78rem", color: "#6b7280", marginBottom: "0.3rem" }}
+          >
+            🔗 Application link — share with applicants:
+          </div>
+          <div style={{ display: "flex", gap: "0.4rem" }}>
+            <input
+              readOnly
+              value={applyUrl}
+              onFocus={(e) => e.target.select()}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: "0.5rem 0.6rem",
+                border: "1px solid #f9a8d4",
+                borderRadius: "8px",
+                fontSize: "0.8rem",
+                color: "#374151",
+                background: "#fdf2f8",
+              }}
+            />
+            <button
+              type="button"
+              onClick={copyApplyLink}
+              style={{
+                background: copied ? "#dcfce7" : PINK,
+                color: copied ? "#166534" : "#fff",
+                border: copied ? "1px solid #86efac" : "none",
+                borderRadius: "8px",
+                padding: "0.5rem 0.8rem",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {copied ? "✓ Copied" : "Copy"}
+            </button>
+          </div>
+          <div style={{ fontSize: "0.74rem", color: "#9ca3af", marginTop: "0.3rem" }}>
+            Anyone with this link can submit a resume for this job.
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <p style={{ color: "#991b1b", marginTop: "0.75rem", fontSize: "0.9rem" }}>
