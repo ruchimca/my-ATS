@@ -1,7 +1,7 @@
-import { getCandidates, isDbConfigured } from "../lib/db";
-import { addCandidate, deleteCandidate } from "./actions";
-import { STAGES } from "../lib/stages";
+import { getCandidates, isDbConfigured, getActiveJobDescription } from "../lib/db";
+import { deleteCandidate } from "./actions";
 import UploadResumes from "./UploadResumes";
+import JobDescription from "./JobDescription";
 
 // Always read fresh data from the database on each request.
 export const dynamic = "force-dynamic";
@@ -18,6 +18,12 @@ const stageStyles = {
   Rejected: { bg: "#fee2e2", fg: "#991b1b" },
 };
 
+function fitStyle(score) {
+  if (score >= 8) return { bg: "#dcfce7", fg: "#166534" };
+  if (score >= 5) return { bg: "#fef3c7", fg: "#92400e" };
+  return { bg: "#fee2e2", fg: "#991b1b" };
+}
+
 function formatDate(value) {
   const d = new Date(value);
   if (isNaN(d.getTime())) return "";
@@ -30,35 +36,18 @@ function formatDate(value) {
 
 export default async function Home() {
   let candidates = [];
+  let job = null;
   let dbError = null;
   const configured = isDbConfigured();
 
   if (configured) {
     try {
       candidates = await getCandidates();
+      job = await getActiveJobDescription();
     } catch (e) {
       dbError = e?.message || "Could not reach the database.";
     }
   }
-
-  const inputStyle = {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "0.6rem 0.7rem",
-    border: "1px solid #f9a8d4",
-    borderRadius: "8px",
-    fontSize: "0.95rem",
-    background: "#fff",
-    color: "#1f2937",
-  };
-
-  const labelStyle = {
-    display: "block",
-    fontSize: "0.8rem",
-    fontWeight: 600,
-    color: PINK_DARK,
-    marginBottom: "0.3rem",
-  };
 
   return (
     <main
@@ -75,7 +64,7 @@ export default async function Home() {
             my-ATS 💗
           </h1>
           <p style={{ margin: "0.4rem 0 0", color: "#6b7280" }}>
-            Candidate Tracker — keep every applicant in one place.
+            Candidate Tracker — set the role, import resumes, see the best fits.
           </p>
         </header>
 
@@ -93,111 +82,18 @@ export default async function Home() {
               Database not connected yet
             </strong>
             <p style={{ margin: "0.5rem 0 0", color: "#6b7280" }}>
-              Your tracker is ready, but it needs a database to save candidates.
-              Once the database is connected in Vercel, this page will start
-              working automatically.
+              The tracker is ready, but it needs a database to save candidates.
             </p>
           </div>
         ) : null}
 
-        {/* Bulk import resumes from a folder */}
+        {/* 1. Job description */}
+        <JobDescription current={job} />
+
+        {/* 2. Import resumes from a folder */}
         <UploadResumes />
 
-        {/* Add candidate form */}
-        <section
-          style={{
-            background: "#fff",
-            border: "1px solid #fbcfe8",
-            borderRadius: "12px",
-            padding: "1.5rem",
-            marginBottom: "2rem",
-            boxShadow: "0 1px 3px rgba(219,39,119,0.08)",
-          }}
-        >
-          <h2
-            style={{
-              margin: "0 0 1rem",
-              fontSize: "1.1rem",
-              color: PINK_DARK,
-            }}
-          >
-            Add a candidate
-          </h2>
-          <form action={addCandidate}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "1rem",
-              }}
-            >
-              <div>
-                <label style={labelStyle} htmlFor="name">
-                  Name *
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  required
-                  placeholder="Jane Doe"
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle} htmlFor="role">
-                  Role
-                </label>
-                <input
-                  id="role"
-                  name="role"
-                  placeholder="Senior Engineer"
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle} htmlFor="stage">
-                  Stage
-                </label>
-                <select id="stage" name="stage" style={inputStyle} defaultValue="Applied">
-                  {STAGES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle} htmlFor="notes">
-                  Notes
-                </label>
-                <input
-                  id="notes"
-                  name="notes"
-                  placeholder="Referred by Sam"
-                  style={inputStyle}
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              style={{
-                marginTop: "1.25rem",
-                background: PINK,
-                color: "#fff",
-                border: "none",
-                borderRadius: "8px",
-                padding: "0.65rem 1.4rem",
-                fontSize: "0.95rem",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              + Add candidate
-            </button>
-          </form>
-        </section>
-
-        {/* Candidate list */}
+        {/* 3. Candidates */}
         <section>
           <h2
             style={{
@@ -223,7 +119,7 @@ export default async function Home() {
                 color: "#9ca3af",
               }}
             >
-              No candidates yet. Add your first one above. ✨
+              No candidates yet. Import a folder of resumes above. ✨
             </div>
           ) : (
             <div
@@ -236,6 +132,8 @@ export default async function Home() {
             >
               {candidates.map((c, i) => {
                 const badge = stageStyles[c.stage] || stageStyles.Applied;
+                const hasFit = Number.isFinite(c.fit_score);
+                const fit = hasFit ? fitStyle(c.fit_score) : null;
                 return (
                   <div
                     key={c.id}
@@ -247,6 +145,24 @@ export default async function Home() {
                       borderTop: i === 0 ? "none" : "1px solid #fce7f3",
                     }}
                   >
+                    {hasFit ? (
+                      <span
+                        title={c.fit_reason || ""}
+                        style={{
+                          background: fit.bg,
+                          color: fit.fg,
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          padding: "0.3rem 0.5rem",
+                          borderRadius: "8px",
+                          whiteSpace: "nowrap",
+                          minWidth: "44px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {c.fit_score}/10
+                      </span>
+                    ) : null}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600 }}>{c.name}</div>
                       <div
@@ -260,8 +176,21 @@ export default async function Home() {
                       >
                         {c.role || "—"}
                         {c.email ? ` · ${c.email}` : ""}
-                        {c.notes ? ` · ${c.notes}` : ""}
                       </div>
+                      {c.fit_reason ? (
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "#9ca3af",
+                            marginTop: "0.15rem",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {c.fit_reason}
+                        </div>
+                      ) : null}
                     </div>
                     {c.resume_url ? (
                       <a
