@@ -97,6 +97,23 @@ export default function CandidateList({ candidates, hasJob }) {
     setConfig(loadConfig());
   }, []);
 
+  // Clear an optimistic status once the database confirms it (or it differs,
+  // meaning the save was rejected) — the server data is the source of truth.
+  useEffect(() => {
+    setPendingStages((p) => {
+      if (Object.keys(p).length === 0) return p;
+      const next = { ...p };
+      let changed = false;
+      for (const c of candidates) {
+        if (next[c.id] !== undefined && next[c.id] === (c.stage || "Applied")) {
+          delete next[c.id];
+          changed = true;
+        }
+      }
+      return changed ? next : p;
+    });
+  }, [candidates]);
+
   function saveConfig(next) {
     setConfig(next);
     try {
