@@ -9,12 +9,23 @@ import {
   deleteCandidateRow,
   getActiveJobDescription,
   saveJobDescription,
+  setActiveJobById,
 } from "../lib/db";
 
 export async function deleteCandidate(formData) {
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) {
     await deleteCandidateRow(id);
+    revalidatePath("/");
+  }
+}
+
+// Switch which job description is active (the one new resumes are scored
+// against and whose candidates are shown).
+export async function setActiveJob(formData) {
+  const id = Number(formData.get("jobId"));
+  if (Number.isInteger(id)) {
+    await setActiveJobById(id);
     revalidatePath("/");
   }
 }
@@ -100,6 +111,26 @@ function candidateToolAndInstruction(jdText) {
       description:
         "The candidate's current or most recent job title, or an empty string if unclear.",
     },
+    phone: {
+      type: "string",
+      description:
+        "The candidate's phone number, or an empty string if not found.",
+    },
+    location: {
+      type: "string",
+      description:
+        "The candidate's location (city, state/country), or an empty string if not found.",
+    },
+    rate: {
+      type: "string",
+      description:
+        "The candidate's desired pay or bill rate (salary or hourly) if stated, otherwise an empty string.",
+    },
+    citizenship: {
+      type: "string",
+      description:
+        "The candidate's citizenship or work-authorization status (e.g. US Citizen, Green Card, H1B), or an empty string if not stated.",
+    },
   };
   const required = ["name"];
 
@@ -117,8 +148,8 @@ function candidateToolAndInstruction(jdText) {
   }
 
   const instruction = jdText
-    ? `Here is the JOB DESCRIPTION we are hiring for:\n\n${jdText}\n\nNow read the resume below. Extract the candidate's full name, email, and current/most recent job title. Then rate from 1 to 10 how well this candidate fits the job description (10 = excellent fit) and give a one-sentence reason. Call save_candidate.`
-    : "Read the resume below. Extract the candidate's full name, email address, and current or most recent job title, then call save_candidate.";
+    ? `Here is the JOB DESCRIPTION we are hiring for:\n\n${jdText}\n\nNow read the resume below. Extract the candidate's full name, email, current/most recent job title, phone number, location, desired pay/bill rate, and citizenship/work-authorization status (leave any of these blank if not present). Then rate from 1 to 10 how well this candidate fits the job description (10 = excellent fit) and give a one-sentence reason. Call save_candidate.`
+    : "Read the resume below. Extract the candidate's full name, email address, current or most recent job title, phone number, location, desired pay/bill rate, and citizenship/work-authorization status (leave any of these blank if not present), then call save_candidate.";
 
   const tool = {
     name: "save_candidate",
@@ -237,6 +268,11 @@ export async function uploadResume(formData) {
   const contentType = file.type || "";
 
   try {
+    const job = await getActiveJobDescription();
+    if (!job) {
+      return { ok: false, error: "Choose a job description first." };
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // 1. Store the file.
@@ -252,7 +288,13 @@ export async function uploadResume(formData) {
     let role = null;
     let fitScore = null;
     let fitReason = null;
+    let phone = null;
+    let location = null;
+    let rate = null;
+    let citizenship = null;
     let aiError = null;
+
+    const pick = (v) => (v && v.trim() ? v.trim() : null);
 
     const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(filename);
     const isDocx =
@@ -266,8 +308,7 @@ export async function uploadResume(formData) {
       aiError = "ANTHROPIC_API_KEY not set on the server";
     } else {
       try {
-        const job = await getActiveJobDescription();
-        const jdText = job && job.content ? job.content : null;
+        const jdText = job.content || null;
         let data;
         if (isPdf) {
           data = await extractFromPdf(buffer.toString("base64"), jdText);
@@ -278,11 +319,14 @@ export async function uploadResume(formData) {
         }
         if (data) {
           if (data.name && data.name.trim()) name = data.name.trim();
-          if (data.email && data.email.trim()) email = data.email.trim();
-          if (data.role && data.role.trim()) role = data.role.trim();
+          email = pick(data.email);
+          role = pick(data.role) || role;
+          phone = pick(data.phone);
+          location = pick(data.location);
+          rate = pick(data.rate);
+          citizenship = pick(data.citizenship);
           if (Number.isFinite(data.fit_score)) fitScore = data.fit_score;
-          if (data.fit_reason && data.fit_reason.trim())
-            fitReason = data.fit_reason.trim();
+          fitReason = pick(data.fit_reason);
         }
       } catch (e) {
         aiError = e?.message || "AI read failed";
@@ -299,6 +343,11 @@ export async function uploadResume(formData) {
       resumeUrl: url,
       fitScore,
       fitReason,
+      phone,
+      location,
+      rate,
+      citizenship,
+      jobId: job.id,
     });
     revalidatePath("/");
     return { ok: true, name, aiError };

@@ -2,15 +2,16 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { uploadJobDescription } from "./actions";
+import { uploadJobDescription, setActiveJob } from "./actions";
 
 const PINK = "#db2777";
 const PINK_DARK = "#9d174d";
 
-export default function JobDescription({ current }) {
+export default function JobDescription({ jobs = [], current }) {
   const inputRef = useRef(null);
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
 
@@ -38,6 +39,21 @@ export default function JobDescription({ current }) {
     router.refresh();
   }
 
+  async function handleSelect(e) {
+    const id = e.target.value;
+    if (!id) return;
+    setSwitching(true);
+    try {
+      const fd = new FormData();
+      fd.append("jobId", id);
+      await setActiveJob(fd);
+    } catch (err) {
+      // ignore — refresh will show current state
+    }
+    setSwitching(false);
+    router.refresh();
+  }
+
   return (
     <section
       style={{
@@ -45,62 +61,82 @@ export default function JobDescription({ current }) {
         border: "1px solid #fbcfe8",
         borderRadius: "12px",
         padding: "1.5rem",
-        marginBottom: "2rem",
+        marginBottom: "1.5rem",
         boxShadow: "0 1px 3px rgba(219,39,119,0.08)",
       }}
     >
-      <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.1rem", color: PINK_DARK }}>
+      <h2 style={{ margin: "0 0 0.75rem", fontSize: "1.1rem", color: PINK_DARK }}>
         Job description
       </h2>
 
-      {current ? (
-        <div style={{ marginBottom: "1rem" }}>
-          <div style={{ fontSize: "0.9rem", color: "#374151" }}>
-            Current role on file:{" "}
-            <strong>{current.filename || "job description"}</strong>
-            {current.file_url ? (
-              <>
-                {" "}
-                <a
-                  href={current.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: PINK, fontWeight: 600, textDecoration: "none" }}
-                >
-                  view ↗
-                </a>
-              </>
-            ) : null}
-          </div>
-          {current.content ? (
-            <p
-              style={{
-                margin: "0.5rem 0 0",
-                fontSize: "0.85rem",
-                color: "#6b7280",
-                whiteSpace: "pre-wrap",
-                maxHeight: "120px",
-                overflowY: "auto",
-                background: "#fdf2f8",
-                borderRadius: "8px",
-                padding: "0.6rem 0.8rem",
-              }}
-            >
-              {current.content}
-            </p>
-          ) : (
-            <p style={{ margin: "0.5rem 0 0", fontSize: "0.85rem", color: "#92400e" }}>
-              No readable text yet — upload a PDF or Word (.docx) file so the AI
-              can score resumes against it.
-            </p>
-          )}
+      {jobs.length > 0 ? (
+        <div style={{ marginBottom: "0.85rem" }}>
+          <label
+            style={{
+              display: "block",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              color: PINK_DARK,
+              marginBottom: "0.3rem",
+            }}
+          >
+            Working on
+          </label>
+          <select
+            value={current?.id || ""}
+            onChange={handleSelect}
+            disabled={switching || busy}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "0.55rem 0.7rem",
+              border: "1px solid #f9a8d4",
+              borderRadius: "8px",
+              fontSize: "0.95rem",
+              background: "#fff",
+              color: "#1f2937",
+            }}
+          >
+            {jobs.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.filename || `Job #${j.id}`}
+              </option>
+            ))}
+          </select>
         </div>
       ) : (
-        <p style={{ margin: "0 0 1rem", color: "#6b7280", fontSize: "0.9rem" }}>
-          Upload the job description (PDF or Word .docx). The AI uses it to
-          score how well each imported resume fits the role.
+        <p style={{ margin: "0 0 0.85rem", color: "#6b7280", fontSize: "0.9rem" }}>
+          Upload a job description to start. Resumes you import are scored against
+          the selected job.
         </p>
       )}
+
+      {current ? (
+        <p
+          style={{
+            margin: "0 0 0.85rem",
+            fontSize: "0.82rem",
+            color: current.content ? "#166534" : "#92400e",
+          }}
+        >
+          {current.content
+            ? "✓ Read and ready — resumes are scored against this role."
+            : "⚠ No readable text yet — upload a PDF or Word (.docx) file."}
+          {current.file_url ? (
+            <>
+              {" "}
+              <a
+                href={current.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: PINK, fontWeight: 600, textDecoration: "none" }}
+              >
+                view ↗
+              </a>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       <input
         ref={inputRef}
@@ -124,11 +160,7 @@ export default function JobDescription({ current }) {
           cursor: busy ? "default" : "pointer",
         }}
       >
-        {busy
-          ? "Reading…"
-          : current
-            ? "📄 Replace job description"
-            : "📄 Upload job description"}
+        {busy ? "Reading…" : "📄 Choose job description"}
       </label>
 
       {error ? (
