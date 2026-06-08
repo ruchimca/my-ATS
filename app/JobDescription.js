@@ -18,6 +18,19 @@ export default function JobDescription({ jobs = [], current }) {
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  async function copyApplyLink() {
+    if (!current) return;
+    const url = `${window.location.origin}/apply/${current.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      window.prompt("Copy this application link:", url);
+    }
+  }
 
   async function handleFile(e) {
     setError("");
@@ -204,6 +217,24 @@ export default function JobDescription({ jobs = [], current }) {
         >
           {busy ? "Reading…" : "➕ Add a job description"}
         </label>
+        {current ? (
+          <button
+            type="button"
+            onClick={copyApplyLink}
+            style={{
+              background: copied ? "#dcfce7" : "#fff",
+              color: copied ? "#166534" : PINK_DARK,
+              border: `1px solid ${copied ? "#86efac" : "#f9a8d4"}`,
+              borderRadius: "8px",
+              padding: "0.55rem 0.9rem",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {copied ? "✓ Copied!" : "🔗 Copy application link"}
+          </button>
+        ) : null}
         {current ? (
           <button
             type="button"

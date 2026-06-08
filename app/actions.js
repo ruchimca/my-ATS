@@ -377,3 +377,91 @@ export async function uploadResume(formData) {
     return { ok: false, error: e?.message || "Upload failed." };
   }
 }
+
+// Public job application: an applicant uploads a resume and fills a short form.
+// Creates a candidate for the job and scores the resume against it.
+export async function submitApplication(formData) {
+  const DOCX_MIME =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+  const jobId = Number(formData.get("jobId"));
+  const name = (formData.get("name") || "").toString().trim();
+  const email = (formData.get("email") || "").toString().trim();
+  const phone = (formData.get("phone") || "").toString().trim();
+  const location = (formData.get("location") || "").toString().trim();
+  const rate = (formData.get("rate") || "").toString().trim();
+  const citizenship = (formData.get("citizenship") || "").toString().trim();
+  const file = formData.get("resume");
+
+  if (!Number.isInteger(jobId)) return { ok: false, error: "Invalid job link." };
+  if (!name) return { ok: false, error: "Please enter your name." };
+  if (!email) return { ok: false, error: "Please enter your email." };
+  if (!file || typeof file === "string")
+    return { ok: false, error: "Please attach your resume." };
+
+  const job = await getJobById(jobId);
+  if (!job)
+    return { ok: false, error: "This job is no longer accepting applications." };
+
+  try {
+    const filename = file.name || "resume";
+    const contentType = file.type || "";
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    const { url } = await put(`resumes/${filename}`, buffer, {
+      access: "public",
+      addRandomSuffix: true,
+      contentType: contentType || undefined,
+    });
+
+    // AI reads the resume for role + fit against the job description.
+    let role = null;
+    let fitScore = null;
+    let fitReason = null;
+    const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(filename);
+    const isDocx = contentType === DOCX_MIME || /\.docx$/i.test(filename);
+    if ((isPdf || isDocx) && process.env.ANTHROPIC_API_KEY) {
+      try {
+        const jdText = job.content || null;
+        let data;
+        if (isPdf) {
+          data = await extractFromPdf(buffer.toString("base64"), jdText);
+        } else {
+          const text = await extractDocxText(buffer);
+          if (text) data = await extractFromText(text, jdText);
+        }
+        if (data) {
+          if (data.role && data.role.trim()) role = data.role.trim();
+          if (Number.isFinite(data.fit_score)) fitScore = data.fit_score;
+          if (data.fit_reason && data.fit_reason.trim())
+            fitReason = data.fit_reason.trim();
+        }
+      } catch (e) {
+        // keep the application even if AI reading fails
+      }
+    }
+
+    await addCandidateRow({
+      name,
+      role,
+      stage: "Applied",
+      notes: null,
+      email,
+      resumeUrl: url,
+      fitScore,
+      fitReason,
+      phone,
+      location,
+      rate,
+      citizenship,
+      jobId,
+    });
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e?.message || "Something went wrong submitting your application.",
+    };
+  }
+}
