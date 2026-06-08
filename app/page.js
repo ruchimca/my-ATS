@@ -12,7 +12,6 @@ import CandidateList from "./CandidateList";
 // Always read fresh data from the database on each request.
 export const dynamic = "force-dynamic";
 
-const PINK = "#db2777";
 const PINK_DARK = "#9d174d";
 
 export default async function Home() {
@@ -37,6 +36,7 @@ export default async function Home() {
     <main
       style={{
         minHeight: "100vh",
+        background: "#fff0f6",
         color: "#1f2937",
         padding: "2rem 1rem 4rem",
       }}
@@ -44,40 +44,31 @@ export default async function Home() {
       <div style={{ maxWidth: "1280px", margin: "0 auto" }}>
         <header
           style={{
-            marginBottom: "1.75rem",
-            paddingBottom: "1.25rem",
-            borderBottom: "1px solid #ececf0",
+            marginBottom: "1.5rem",
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "center",
+            alignItems: "flex-end",
             gap: "1rem",
             flexWrap: "wrap",
           }}
         >
           <div>
-            <h1
-              style={{
-                fontSize: "1.7rem",
-                margin: 0,
-                color: PINK_DARK,
-                letterSpacing: "-0.01em",
-              }}
-            >
-              my-ATS
+            <h1 style={{ fontSize: "2rem", margin: 0, color: PINK_DARK }}>
+              my-ATS 💗
             </h1>
-            <p style={{ margin: "0.3rem 0 0", color: "#6b7280", fontSize: "0.95rem" }}>
+            <p style={{ margin: "0.4rem 0 0", color: "#6b7280" }}>
               Pick a job, import resumes, see the best fits ranked.
             </p>
           </div>
           <a
             href="/report"
             style={{
-              background: PINK,
-              color: "#fff",
-              border: "none",
+              background: "#fff",
+              color: PINK_DARK,
+              border: "1px solid #f9a8d4",
               borderRadius: "8px",
-              padding: "0.6rem 1.15rem",
-              fontSize: "0.92rem",
+              padding: "0.6rem 1.1rem",
+              fontSize: "0.95rem",
               fontWeight: 600,
               textDecoration: "none",
               whiteSpace: "nowrap",

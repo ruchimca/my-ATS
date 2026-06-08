@@ -27,6 +27,7 @@ export default async function ApplyPage({ params }) {
     <main
       style={{
         minHeight: "100vh",
+        background: "#fff0f6",
         color: "#1f2937",
         padding: "2.5rem 1rem 4rem",
       }}
