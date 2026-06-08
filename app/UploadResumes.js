@@ -49,7 +49,10 @@ export default function UploadResumes() {
         fd.append("file", file);
         const result = await uploadResume(fd);
         if (result?.ok) {
-          setLog((l) => [...l, { name: result.name || file.name, ok: true }]);
+          setLog((l) => [
+            ...l,
+            { name: result.name || file.name, ok: true, msg: result.aiError },
+          ]);
         } else {
           setLog((l) => [
             ...l,
@@ -135,9 +138,14 @@ export default function UploadResumes() {
           }}
         >
           {log.map((item, i) => (
-            <li key={i} style={{ color: item.ok ? "#166534" : "#991b1b" }}>
+            <li
+              key={i}
+              style={{
+                color: !item.ok ? "#991b1b" : item.msg ? "#92400e" : "#166534",
+              }}
+            >
               {item.ok ? "✓" : "✕"} {item.name}
-              {item.ok ? "" : ` — ${item.msg}`}
+              {item.msg ? ` — ${item.msg}` : ""}
             </li>
           ))}
         </ul>

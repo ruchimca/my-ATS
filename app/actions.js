@@ -124,9 +124,14 @@ export async function uploadResume(formData) {
     let name = filenameToName(filename);
     let email = null;
     let role = null;
+    let aiError = null;
 
     const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(filename);
-    if (isPdf && process.env.ANTHROPIC_API_KEY) {
+    if (!isPdf) {
+      aiError = "not a PDF — used file name";
+    } else if (!process.env.ANTHROPIC_API_KEY) {
+      aiError = "ANTHROPIC_API_KEY not set on the server";
+    } else {
       try {
         const data = await extractFromPdf(buffer.toString("base64"));
         if (data) {
@@ -135,7 +140,7 @@ export async function uploadResume(formData) {
           if (data.role && data.role.trim()) role = data.role.trim();
         }
       } catch (e) {
-        // AI read failed — keep the file-name fallback.
+        aiError = e?.message || "AI read failed";
       }
     }
 
@@ -149,7 +154,7 @@ export async function uploadResume(formData) {
       resumeUrl: url,
     });
     revalidatePath("/");
-    return { ok: true, name };
+    return { ok: true, name, aiError };
   } catch (e) {
     return { ok: false, error: e?.message || "Upload failed." };
   }
