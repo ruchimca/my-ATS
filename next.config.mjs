@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // mammoth reads its own files at runtime; keep it external to the bundle.
+  serverExternalPackages: ["mammoth"],
   experimental: {
     serverActions: {
       // Resumes are uploaded through a server action; raise the body limit

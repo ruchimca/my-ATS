@@ -90,15 +90,15 @@ export default function JobDescription({ current }) {
             </p>
           ) : (
             <p style={{ margin: "0.5rem 0 0", fontSize: "0.85rem", color: "#92400e" }}>
-              No readable text yet — upload a PDF so the AI can score resumes
-              against it.
+              No readable text yet — upload a PDF or Word (.docx) file so the AI
+              can score resumes against it.
             </p>
           )}
         </div>
       ) : (
         <p style={{ margin: "0 0 1rem", color: "#6b7280", fontSize: "0.9rem" }}>
-          Upload the job description (PDF recommended). The AI uses it to score
-          how well each imported resume fits the role.
+          Upload the job description (PDF or Word .docx). The AI uses it to
+          score how well each imported resume fits the role.
         </p>
       )}
 

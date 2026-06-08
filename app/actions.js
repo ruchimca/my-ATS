@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
 import Anthropic from "@anthropic-ai/sdk";
+import mammoth from "mammoth";
 import {
   addCandidateRow,
   deleteCandidateRow,
@@ -34,8 +35,35 @@ function pdfDocumentBlock(base64) {
   };
 }
 
-// Read a job-description PDF and return a concise plain-text summary of the
-// role and its key requirements, for later use when scoring resumes.
+// Pull plain text out of a Word (.docx) file.
+async function extractDocxText(buffer) {
+  const { value } = await mammoth.extractRawText({ buffer });
+  return (value || "").trim();
+}
+
+// Summarize job-description text (from a .docx) into a concise plain-text brief.
+async function summarizeJdText(text) {
+  const client = new Anthropic();
+  const message = await client.messages.create({
+    model: "claude-haiku-4-5",
+    max_tokens: 1500,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Summarize this job description as plain text: the job title, key responsibilities, and the most important required skills and qualifications. Be concise (under 250 words).\n\nJOB DESCRIPTION:\n\n${text.slice(0, 20000)}`,
+          },
+        ],
+      },
+    ],
+  });
+  const textBlock = message.content.find((b) => b.type === "text");
+  return textBlock ? textBlock.text.trim() : "";
+}
+
+// Read a job-description PDF (vision) and return a concise plain-text summary.
 async function extractJdText(base64) {
   const client = new Anthropic();
   const message = await client.messages.create({
@@ -58,11 +86,8 @@ async function extractJdText(base64) {
   return textBlock ? textBlock.text.trim() : "";
 }
 
-// Read a resume PDF and extract structured fields. When a job description is
-// provided, also score how well the candidate fits the role.
-async function extractFromPdf(base64, jdText) {
-  const client = new Anthropic();
-
+// Build the tool + instruction for candidate extraction (and optional scoring).
+function candidateToolAndInstruction(jdText) {
   const properties = {
     name: { type: "string", description: "The candidate's full name." },
     email: {
@@ -92,35 +117,53 @@ async function extractFromPdf(base64, jdText) {
   }
 
   const instruction = jdText
-    ? `Here is the JOB DESCRIPTION we are hiring for:\n\n${jdText}\n\nNow read the attached resume. Extract the candidate's full name, email, and current/most recent job title. Then rate from 1 to 10 how well this candidate fits the job description (10 = excellent fit) and give a one-sentence reason. Call save_candidate.`
-    : "Extract the candidate's full name, email address, and current or most recent job title from this resume, then call save_candidate.";
+    ? `Here is the JOB DESCRIPTION we are hiring for:\n\n${jdText}\n\nNow read the resume below. Extract the candidate's full name, email, and current/most recent job title. Then rate from 1 to 10 how well this candidate fits the job description (10 = excellent fit) and give a one-sentence reason. Call save_candidate.`
+    : "Read the resume below. Extract the candidate's full name, email address, and current or most recent job title, then call save_candidate.";
 
+  const tool = {
+    name: "save_candidate",
+    description: "Save the candidate details extracted from their resume.",
+    input_schema: {
+      type: "object",
+      properties,
+      required,
+      additionalProperties: false,
+    },
+  };
+  return { tool, instruction };
+}
+
+// Run the extraction given the resume content blocks (a PDF document, or text).
+async function runCandidateExtraction(resumeBlocks, jdText) {
+  const client = new Anthropic();
+  const { tool, instruction } = candidateToolAndInstruction(jdText);
   const message = await client.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 1024,
-    tools: [
-      {
-        name: "save_candidate",
-        description: "Save the candidate details extracted from their resume.",
-        input_schema: {
-          type: "object",
-          properties,
-          required,
-          additionalProperties: false,
-        },
-      },
-    ],
+    tools: [tool],
     tool_choice: { type: "tool", name: "save_candidate" },
     messages: [
       {
         role: "user",
-        content: [pdfDocumentBlock(base64), { type: "text", text: instruction }],
+        content: [...resumeBlocks, { type: "text", text: instruction }],
       },
     ],
   });
-
   const toolUse = message.content.find((b) => b.type === "tool_use");
   return toolUse ? toolUse.input : null;
+}
+
+// Read a resume PDF (vision) → structured fields + optional fit score.
+async function extractFromPdf(base64, jdText) {
+  return runCandidateExtraction([pdfDocumentBlock(base64)], jdText);
+}
+
+// Read resume text (from a .docx) → structured fields + optional fit score.
+async function extractFromText(text, jdText) {
+  return runCandidateExtraction(
+    [{ type: "text", text: `RESUME:\n\n${text.slice(0, 30000)}` }],
+    jdText,
+  );
 }
 
 // Upload the job description file, store it, and (for PDFs) read its text so we
@@ -146,17 +189,32 @@ export async function uploadJobDescription(formData) {
     let content = "";
     let warning = null;
     const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(filename);
-    if (!isPdf) {
-      warning =
-        "Saved, but only PDF job descriptions can be read for AI scoring. Please upload a PDF for scoring.";
-    } else if (!process.env.ANTHROPIC_API_KEY) {
+    const isDocx =
+      contentType ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      /\.docx$/i.test(filename);
+
+    if (!process.env.ANTHROPIC_API_KEY) {
       warning = "Saved, but ANTHROPIC_API_KEY is not set, so AI can't read it.";
-    } else {
+    } else if (isPdf) {
       try {
         content = await extractJdText(buffer.toString("base64"));
       } catch (e) {
         warning = e?.message || "Saved, but reading the text failed.";
       }
+    } else if (isDocx) {
+      try {
+        const raw = await extractDocxText(buffer);
+        content = raw ? await summarizeJdText(raw) : "";
+        if (!content) {
+          warning = "Saved, but no readable text was found in the Word file.";
+        }
+      } catch (e) {
+        warning = e?.message || "Saved, but reading the Word file failed.";
+      }
+    } else {
+      warning =
+        "Saved, but only PDF or Word (.docx) job descriptions can be read for AI scoring.";
     }
 
     await saveJobDescription({ filename, fileUrl: url, content });
@@ -197,15 +255,27 @@ export async function uploadResume(formData) {
     let aiError = null;
 
     const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(filename);
-    if (!isPdf) {
-      aiError = "not a PDF — used file name";
+    const isDocx =
+      contentType ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      /\.docx$/i.test(filename);
+
+    if (!isPdf && !isDocx) {
+      aiError = "unsupported file type — used file name (use PDF or .docx)";
     } else if (!process.env.ANTHROPIC_API_KEY) {
       aiError = "ANTHROPIC_API_KEY not set on the server";
     } else {
       try {
         const job = await getActiveJobDescription();
         const jdText = job && job.content ? job.content : null;
-        const data = await extractFromPdf(buffer.toString("base64"), jdText);
+        let data;
+        if (isPdf) {
+          data = await extractFromPdf(buffer.toString("base64"), jdText);
+        } else {
+          const text = await extractDocxText(buffer);
+          if (!text) throw new Error("no readable text in the Word file");
+          data = await extractFromText(text, jdText);
+        }
         if (data) {
           if (data.name && data.name.trim()) name = data.name.trim();
           if (data.email && data.email.trim()) email = data.email.trim();

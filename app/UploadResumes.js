@@ -104,8 +104,8 @@ export default function UploadResumes() {
         Import a folder of resumes
       </h2>
       <p style={{ margin: "0 0 1rem", color: "#6b7280", fontSize: "0.9rem" }}>
-        Pick a folder of resumes (PDF works best). Each one is saved and read by
-        the AI to fill in the name, email, role, and fit score.
+        Pick a folder of resumes (PDF or Word .docx). Each one is saved and read
+        by the AI to fill in the name, email, role, and fit score.
       </p>
 
       <input
