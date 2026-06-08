@@ -15,40 +15,28 @@ export const dynamic = "force-dynamic";
 const PINK = "#db2777";
 const PINK_DARK = "#9d174d";
 
-const stageStyles = {
-  Applied: { bg: "#fce7f3", fg: "#9d174d" },
-  Screening: { bg: "#ede9fe", fg: "#6d28d9" },
-  Interview: { bg: "#fef3c7", fg: "#92400e" },
-  Offer: { bg: "#dbeafe", fg: "#1e40af" },
-  Hired: { bg: "#dcfce7", fg: "#166534" },
-  Rejected: { bg: "#fee2e2", fg: "#991b1b" },
-};
-
 function fitStyle(score) {
   if (score >= 8) return { bg: "#dcfce7", fg: "#166534" };
   if (score >= 5) return { bg: "#fef3c7", fg: "#92400e" };
   return { bg: "#fee2e2", fg: "#991b1b" };
 }
 
-function formatDate(value) {
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+const th = {
+  padding: "0.6rem 0.7rem",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+  color: PINK_DARK,
+  whiteSpace: "nowrap",
+  borderBottom: "1px solid #fbcfe8",
+};
 
-function DetailRow({ label, value }) {
-  if (!value) return null;
-  return (
-    <div style={{ display: "flex", gap: "0.4rem", lineHeight: 1.5 }}>
-      <span style={{ color: "#9ca3af", minWidth: "78px" }}>{label}</span>
-      <span style={{ color: "#374151" }}>{value}</span>
-    </div>
-  );
-}
+const td = {
+  padding: "0.6rem 0.7rem",
+  verticalAlign: "top",
+  color: "#374151",
+};
 
 export default async function Home() {
   let candidates = [];
@@ -76,7 +64,7 @@ export default async function Home() {
         padding: "2rem 1rem 4rem",
       }}
     >
-      <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+      <div style={{ maxWidth: "1280px", margin: "0 auto" }}>
         <header style={{ marginBottom: "1.5rem" }}>
           <h1 style={{ fontSize: "2rem", margin: 0, color: PINK_DARK }}>
             my-ATS 💗
@@ -114,13 +102,13 @@ export default async function Home() {
           }}
         >
           {/* Left: controls */}
-          <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+          <div style={{ flex: "0 1 300px", minWidth: "280px" }}>
             <JobDescription jobs={jobs} current={job} />
             <UploadResumes />
           </div>
 
-          {/* Right: candidates */}
-          <div style={{ flex: "1.4 1 440px", minWidth: 0 }}>
+          {/* Right: candidates table */}
+          <div style={{ flex: "1 1 640px", minWidth: 0 }}>
             <h2
               style={{
                 margin: "0 0 1rem",
@@ -155,156 +143,110 @@ export default async function Home() {
                   background: "#fff",
                   border: "1px solid #fbcfe8",
                   borderRadius: "12px",
-                  overflow: "hidden",
+                  overflowX: "auto",
                 }}
               >
-                {candidates.map((c, i) => {
-                  const badge = stageStyles[c.stage] || stageStyles.Applied;
-                  const hasFit = Number.isFinite(c.fit_score);
-                  const fit = hasFit ? fitStyle(c.fit_score) : null;
-                  const showDetails = hasFit && c.fit_score >= 7;
-                  return (
-                    <div
-                      key={c.id}
-                      style={{
-                        padding: "1rem 1.25rem",
-                        borderTop: i === 0 ? "none" : "1px solid #fce7f3",
-                      }}
-                    >
-                      {/* Top: score + name + stage */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.6rem",
-                        }}
-                      >
-                        {hasFit ? (
-                          <span
-                            style={{
-                              background: fit.bg,
-                              color: fit.fg,
-                              fontSize: "0.8rem",
-                              fontWeight: 700,
-                              padding: "0.3rem 0.5rem",
-                              borderRadius: "8px",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {c.fit_score}/10
-                          </span>
-                        ) : null}
-                        <span style={{ fontWeight: 600, flex: 1, minWidth: 0 }}>
-                          {c.name}
-                        </span>
-                        <span
-                          style={{
-                            background: badge.bg,
-                            color: badge.fg,
-                            fontSize: "0.75rem",
-                            fontWeight: 600,
-                            padding: "0.2rem 0.55rem",
-                            borderRadius: "999px",
-                            whiteSpace: "nowrap",
-                          }}
+                <table
+                  style={{
+                    borderCollapse: "collapse",
+                    width: "100%",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ background: "#fdf2f8", textAlign: "left" }}>
+                      <th style={th}>Fit</th>
+                      <th style={th}>Name</th>
+                      <th style={th}>Email</th>
+                      <th style={th}>Phone</th>
+                      <th style={th}>Location</th>
+                      <th style={th}>Rate</th>
+                      <th style={th}>Citizenship</th>
+                      <th style={th}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map((c) => {
+                      const hasFit = Number.isFinite(c.fit_score);
+                      const fit = hasFit ? fitStyle(c.fit_score) : null;
+                      return (
+                        <tr
+                          key={c.id}
+                          style={{ borderTop: "1px solid #fce7f3" }}
                         >
-                          {c.stage}
-                        </span>
-                      </div>
-
-                      {/* Role */}
-                      <div
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "#6b7280",
-                          marginTop: "0.25rem",
-                        }}
-                      >
-                        {c.role || "—"}
-                        {!showDetails && c.email ? ` · ${c.email}` : ""}
-                      </div>
-
-                      {/* Fit reason */}
-                      {c.fit_reason ? (
-                        <div
-                          style={{
-                            fontSize: "0.8rem",
-                            color: "#9ca3af",
-                            fontStyle: "italic",
-                            marginTop: "0.25rem",
-                          }}
-                        >
-                          {c.fit_reason}
-                        </div>
-                      ) : null}
-
-                      {/* Details for strong matches (>= 7) */}
-                      {showDetails ? (
-                        <div
-                          style={{
-                            marginTop: "0.6rem",
-                            background: "#fdf2f8",
-                            borderRadius: "8px",
-                            padding: "0.6rem 0.8rem",
-                            fontSize: "0.82rem",
-                          }}
-                        >
-                          <DetailRow label="Email" value={c.email} />
-                          <DetailRow label="Phone" value={c.phone} />
-                          <DetailRow label="Location" value={c.location} />
-                          <DetailRow label="Rate" value={c.rate} />
-                          <DetailRow label="Citizenship" value={c.citizenship} />
-                        </div>
-                      ) : null}
-
-                      {/* Bottom: resume + date + delete */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: "0.75rem",
-                          marginTop: "0.7rem",
-                        }}
-                      >
-                        {c.resume_url ? (
-                          <a
-                            href={c.resume_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              fontSize: "0.8rem",
-                              color: PINK,
-                              fontWeight: 600,
-                              textDecoration: "none",
-                            }}
-                          >
-                            Resume ↗
-                          </a>
-                        ) : (
-                          <span />
-                        )}
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.75rem",
-                          }}
-                        >
-                          <span
-                            style={{ fontSize: "0.78rem", color: "#9ca3af" }}
-                          >
-                            {formatDate(c.created_at)}
-                          </span>
-                          <form action={deleteCandidate}>
-                            <input type="hidden" name="id" value={c.id} />
-                            <DeleteButton />
-                          </form>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                          <td style={td}>
+                            {hasFit ? (
+                              <span
+                                style={{
+                                  background: fit.bg,
+                                  color: fit.fg,
+                                  fontSize: "0.78rem",
+                                  fontWeight: 700,
+                                  padding: "0.25rem 0.45rem",
+                                  borderRadius: "8px",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {c.fit_score}/10
+                              </span>
+                            ) : (
+                              <span style={{ color: "#d1d5db" }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ ...td, minWidth: "150px" }}>
+                            <div style={{ fontWeight: 600 }}>{c.name}</div>
+                            {c.role ? (
+                              <div
+                                style={{ fontSize: "0.78rem", color: "#9ca3af" }}
+                              >
+                                {c.role}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td style={{ ...td, whiteSpace: "nowrap" }}>
+                            {c.email || ""}
+                          </td>
+                          <td style={{ ...td, whiteSpace: "nowrap" }}>
+                            {c.phone || ""}
+                          </td>
+                          <td style={td}>{c.location || ""}</td>
+                          <td style={td}>{c.rate || ""}</td>
+                          <td style={td}>{c.citizenship || ""}</td>
+                          <td style={{ ...td, whiteSpace: "nowrap" }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "0.35rem",
+                                alignItems: "flex-start",
+                              }}
+                            >
+                              {c.resume_url ? (
+                                <a
+                                  href={c.resume_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    fontSize: "0.8rem",
+                                    color: PINK,
+                                    fontWeight: 600,
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  Resume ↗
+                                </a>
+                              ) : null}
+                              <form action={deleteCandidate}>
+                                <input type="hidden" name="id" value={c.id} />
+                                <DeleteButton />
+                              </form>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

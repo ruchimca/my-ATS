@@ -10,6 +10,7 @@ import {
   getActiveJobDescription,
   saveJobDescription,
   setActiveJobById,
+  deleteJobById,
 } from "../lib/db";
 
 export async function deleteCandidate(formData) {
@@ -26,6 +27,15 @@ export async function setActiveJob(formData) {
   const id = Number(formData.get("jobId"));
   if (Number.isInteger(id)) {
     await setActiveJobById(id);
+    revalidatePath("/");
+  }
+}
+
+// Delete a job description and all of its candidates.
+export async function deleteJob(formData) {
+  const id = Number(formData.get("jobId"));
+  if (Number.isInteger(id)) {
+    await deleteJobById(id);
     revalidatePath("/");
   }
 }

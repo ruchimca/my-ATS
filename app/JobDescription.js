@@ -2,10 +2,18 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { uploadJobDescription, setActiveJob } from "./actions";
+import { uploadJobDescription, setActiveJob, deleteJob } from "./actions";
 
 const PINK = "#db2777";
 const PINK_DARK = "#9d174d";
+
+function jobLabel(j) {
+  const d = new Date(j.created_at);
+  const when = isNaN(d.getTime())
+    ? ""
+    : ` — ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  return `${j.filename || `Job #${j.id}`}${when}`;
+}
 
 export default function JobDescription({ jobs = [], current }) {
   const inputRef = useRef(null);
@@ -48,7 +56,25 @@ export default function JobDescription({ jobs = [], current }) {
       fd.append("jobId", id);
       await setActiveJob(fd);
     } catch (err) {
-      // ignore — refresh will show current state
+      // ignore — refresh shows current state
+    }
+    setSwitching(false);
+    router.refresh();
+  }
+
+  async function handleDeleteJob() {
+    if (!current) return;
+    const ok = window.confirm(
+      `Delete the job "${current.filename || "this job"}" and all of its candidates? This cannot be undone.`,
+    );
+    if (!ok) return;
+    setSwitching(true);
+    try {
+      const fd = new FormData();
+      fd.append("jobId", current.id);
+      await deleteJob(fd);
+    } catch (err) {
+      // ignore
     }
     setSwitching(false);
     router.refresh();
@@ -92,17 +118,20 @@ export default function JobDescription({ jobs = [], current }) {
               padding: "0.55rem 0.7rem",
               border: "1px solid #f9a8d4",
               borderRadius: "8px",
-              fontSize: "0.95rem",
+              fontSize: "0.9rem",
               background: "#fff",
               color: "#1f2937",
             }}
           >
             {jobs.map((j) => (
               <option key={j.id} value={j.id}>
-                {j.filename || `Job #${j.id}`}
+                {jobLabel(j)}
               </option>
             ))}
           </select>
+          <div style={{ fontSize: "0.78rem", color: "#9ca3af", marginTop: "0.3rem" }}>
+            Switch between jobs here, or add a new one below.
+          </div>
         </div>
       ) : (
         <p style={{ margin: "0 0 0.85rem", color: "#6b7280", fontSize: "0.9rem" }}>
@@ -147,21 +176,42 @@ export default function JobDescription({ jobs = [], current }) {
         style={{ display: "none" }}
         id="jd-input"
       />
-      <label
-        htmlFor="jd-input"
-        style={{
-          display: "inline-block",
-          background: busy ? "#f9a8d4" : PINK,
-          color: "#fff",
-          borderRadius: "8px",
-          padding: "0.6rem 1.3rem",
-          fontSize: "0.95rem",
-          fontWeight: 600,
-          cursor: busy ? "default" : "pointer",
-        }}
-      >
-        {busy ? "Reading…" : "📄 Choose job description"}
-      </label>
+      <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+        <label
+          htmlFor="jd-input"
+          style={{
+            display: "inline-block",
+            background: busy ? "#f9a8d4" : PINK,
+            color: "#fff",
+            borderRadius: "8px",
+            padding: "0.6rem 1.3rem",
+            fontSize: "0.95rem",
+            fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+          }}
+        >
+          {busy ? "Reading…" : "➕ Add a job description"}
+        </label>
+        {current ? (
+          <button
+            type="button"
+            onClick={handleDeleteJob}
+            disabled={switching || busy}
+            style={{
+              background: "#fee2e2",
+              color: "#b91c1c",
+              border: "1px solid #fca5a5",
+              borderRadius: "8px",
+              padding: "0.55rem 0.9rem",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              cursor: switching || busy ? "default" : "pointer",
+            }}
+          >
+            🗑 Delete this job
+          </button>
+        ) : null}
+      </div>
 
       {error ? (
         <p style={{ color: "#991b1b", marginTop: "0.75rem", fontSize: "0.9rem" }}>
