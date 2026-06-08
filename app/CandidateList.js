@@ -31,15 +31,15 @@ const ALL_COLUMNS = [
   { key: "name", label: "Name" },
   { key: "actions", label: "Resume / Delete" },
   { key: "title", label: "Title" },
+  { key: "whyFit", label: "Why a great fit" },
   { key: "email", label: "Email" },
   { key: "phone", label: "Phone" },
   { key: "location", label: "Location" },
   { key: "rate", label: "Rate" },
   { key: "citizenship", label: "Citizenship" },
-  { key: "whyFit", label: "Why a great fit" },
 ];
 const DEFAULT_CONFIG = ALL_COLUMNS.map((c) => ({ key: c.key, visible: true }));
-const STORAGE_KEY = "ats_columns_v3";
+const STORAGE_KEY = "ats_columns_v4";
 
 function labelFor(key) {
   return ALL_COLUMNS.find((c) => c.key === key)?.label || key;
@@ -91,6 +91,7 @@ export default function CandidateList({ candidates, hasJob }) {
   const [filter, setFilter] = useState("All");
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [showCols, setShowCols] = useState(false);
+  const [pendingStages, setPendingStages] = useState({});
 
   useEffect(() => {
     setConfig(loadConfig());
@@ -127,10 +128,15 @@ export default function CandidateList({ candidates, hasJob }) {
   const visibleCols = config.filter((c) => c.visible);
 
   async function changeStage(id, stage) {
+    setPendingStages((p) => ({ ...p, [id]: stage })); // show change immediately
     const fd = new FormData();
     fd.append("id", id);
     fd.append("stage", stage);
-    await updateStage(fd);
+    try {
+      await updateStage(fd);
+    } catch (e) {
+      // ignore; refresh will reflect the true state
+    }
     router.refresh();
   }
 
@@ -157,10 +163,11 @@ export default function CandidateList({ candidates, hasJob }) {
         );
       }
       case "status": {
-        const s = stageStyles[c.stage] || stageStyles.Applied;
+        const stage = pendingStages[c.id] ?? c.stage ?? "Applied";
+        const s = stageStyles[stage] || stageStyles.Applied;
         return (
           <select
-            value={c.stage || "Applied"}
+            value={stage}
             onChange={(e) => changeStage(c.id, e.target.value)}
             style={{
               background: s.bg,

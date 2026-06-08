@@ -10,11 +10,6 @@ function roleName(filename) {
   return filename.replace(/\.[^.]+$/, "");
 }
 
-function avg(nums) {
-  if (!nums.length) return null;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
-}
-
 // Derive a role's pipeline stage from where its candidates sit.
 function roleStage(cands) {
   const stages = new Set(
@@ -37,9 +32,6 @@ const STAGE_ICON = {
 export default async function Report() {
   const configured = isDbConfigured();
   const roleStats = [];
-  const allScores = [];
-  let totalCandidates = 0;
-  let totalStrong = 0;
   let dbError = null;
 
   if (configured) {
@@ -47,20 +39,8 @@ export default async function Report() {
       const jobs = await getJobs();
       for (const job of jobs) {
         const cands = await getCandidates(job.id);
-        const scores = cands
-          .map((c) => c.fit_score)
-          .filter((s) => Number.isFinite(s));
-        const strong = cands.filter(
-          (c) => Number.isFinite(c.fit_score) && c.fit_score >= 7,
-        ).length;
-        totalCandidates += cands.length;
-        totalStrong += strong;
-        allScores.push(...scores);
         roleStats.push({
           name: roleName(job.filename),
-          count: cands.length,
-          strong,
-          avg: avg(scores),
           stage: roleStage(cands),
         });
       }
@@ -69,21 +49,24 @@ export default async function Report() {
     }
   }
 
-  const overallAvg = avg(allScores);
   const generated = new Date().toLocaleDateString(undefined, {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 
-  // Group roles by pipeline stage for the CEO summary.
+  const counts = { Searching: 0, Interviewing: 0, "In offer": 0, Filled: 0 };
+  roleStats.forEach((r) => {
+    counts[r.stage] = (counts[r.stage] || 0) + 1;
+  });
+
   const byStage = STAGE_ORDER.map((stage) => ({
     stage,
     roles: roleStats.filter((r) => r.stage === stage),
   })).filter((g) => g.roles.length > 0);
 
   const kpiCard = {
-    flex: "1 1 140px",
+    flex: "1 1 120px",
     background: "#fdf2f8",
     border: "1px solid #fbcfe8",
     borderRadius: "10px",
@@ -160,7 +143,7 @@ export default async function Report() {
           <p style={{ color: "#991b1b" }}>Could not load data: {dbError}</p>
         ) : null}
 
-        {/* KPIs */}
+        {/* KPIs: roles by stage */}
         <div
           style={{
             display: "flex",
@@ -173,20 +156,14 @@ export default async function Report() {
             <div style={kpiNum}>{roleStats.length}</div>
             <div style={kpiLabel}>Total roles</div>
           </div>
-          <div style={kpiCard}>
-            <div style={kpiNum}>{totalCandidates}</div>
-            <div style={kpiLabel}>Candidates</div>
-          </div>
-          <div style={kpiCard}>
-            <div style={kpiNum}>{totalStrong}</div>
-            <div style={kpiLabel}>Strong matches (7+)</div>
-          </div>
-          <div style={kpiCard}>
-            <div style={kpiNum}>
-              {overallAvg != null ? `${overallAvg.toFixed(1)}` : "—"}
+          {STAGE_ORDER.map((stage) => (
+            <div key={stage} style={kpiCard}>
+              <div style={kpiNum}>{counts[stage] || 0}</div>
+              <div style={kpiLabel}>
+                {STAGE_ICON[stage]} {stage}
+              </div>
             </div>
-            <div style={kpiLabel}>Avg fit / 10</div>
-          </div>
+          ))}
         </div>
 
         {/* Roles by stage */}
@@ -234,9 +211,6 @@ export default async function Report() {
               <tr>
                 <th style={th}>Role</th>
                 <th style={th}>Stage</th>
-                <th style={{ ...th, textAlign: "center" }}>Candidates</th>
-                <th style={{ ...th, textAlign: "center" }}>Strong (7+)</th>
-                <th style={{ ...th, textAlign: "center" }}>Avg fit</th>
               </tr>
             </thead>
             <tbody>
@@ -245,11 +219,6 @@ export default async function Report() {
                   <td style={{ ...td, fontWeight: 600 }}>{r.name}</td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>
                     {STAGE_ICON[r.stage]} {r.stage}
-                  </td>
-                  <td style={{ ...td, textAlign: "center" }}>{r.count}</td>
-                  <td style={{ ...td, textAlign: "center" }}>{r.strong}</td>
-                  <td style={{ ...td, textAlign: "center" }}>
-                    {r.avg != null ? r.avg.toFixed(1) : "—"}
                   </td>
                 </tr>
               ))}
