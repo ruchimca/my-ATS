@@ -54,7 +54,7 @@ export default async function Home() {
         >
           <div>
             <h1 style={{ fontSize: "2rem", margin: 0, color: PINK_DARK }}>
-              my-ATS 💗
+              my-ATS
             </h1>
             <p style={{ margin: "0.4rem 0 0", color: "#6b7280" }}>
               Pick a job, import resumes, see the best fits ranked.

@@ -1,0 +1,16 @@
+/* Pink focus ring for form fields */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #db2777 !important;
+  box-shadow: 0 0 0 3px rgba(219, 39, 119, 0.18);
+}
+
+/* Subtle, responsive hover on buttons */
+button {
+  transition: filter 0.15s ease;
+}
+button:hover:not(:disabled) {
+  filter: brightness(0.96);
+}

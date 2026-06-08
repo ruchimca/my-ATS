@@ -1,3 +1,5 @@
+import "./globals.css";
+
 export const metadata = {
   title: "my-ATS",
   description: "A personal Applicant Tracking System",
