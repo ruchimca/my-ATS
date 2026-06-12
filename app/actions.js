@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { put, del } from "@vercel/blob";
 import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
 import {
   addCandidateRow,
   deleteCandidateRow,
@@ -158,10 +157,12 @@ async function extractDocxText(buffer) {
 }
 
 // Pull plain text out of a PDF — no AI. Used for the free keyword pass.
+// unpdf is imported lazily so a load failure can never break this module.
 async function extractPdfText(buffer) {
-  const parser = new PDFParse({ data: buffer });
-  const result = await parser.getText();
-  return (result?.text || "").trim();
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const pdf = await getDocumentProxy(new Uint8Array(buffer));
+  const { text } = await extractText(pdf, { mergePages: true });
+  return (Array.isArray(text) ? text.join("\n") : text || "").trim();
 }
 
 // Summarize job-description text (from a .docx) into a concise plain-text brief.

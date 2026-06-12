@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // These read their own files at runtime; keep them out of the bundle.
-  serverExternalPackages: ["mammoth", "pdf-parse"],
+  // mammoth reads its own files at runtime; keep it out of the bundle.
+  serverExternalPackages: ["mammoth"],
   experimental: {
     serverActions: {
       // Resumes are uploaded through a server action; raise the body limit
