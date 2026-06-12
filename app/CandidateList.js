@@ -96,6 +96,7 @@ function csvCell(v) {
 export default function CandidateList({ candidates, hasJob, jobId, jobName }) {
   const router = useRouter();
   const [filter, setFilter] = useState("All");
+  const [locFilter, setLocFilter] = useState("");
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [showCols, setShowCols] = useState(false);
   const [pendingStages, setPendingStages] = useState({});
@@ -145,10 +146,12 @@ export default function CandidateList({ candidates, hasJob, jobId, jobName }) {
   const strong = candidates.filter(
     (c) => Number.isFinite(c.fit_score) && c.fit_score >= 7,
   ).length;
-  const shown =
-    filter === "All"
-      ? candidates
-      : candidates.filter((c) => (c.stage || "Applied") === filter);
+  const loc = locFilter.trim().toLowerCase();
+  const shown = candidates.filter((c) => {
+    const statusOk = filter === "All" || (c.stage || "Applied") === filter;
+    const locOk = !loc || (c.location || "").toLowerCase().includes(loc);
+    return statusOk && locOk;
+  });
   const visibleCols = config.filter((c) => c.visible);
 
   async function changeStage(id, stage) {
@@ -375,7 +378,22 @@ export default function CandidateList({ candidates, hasJob, jobId, jobName }) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            type="text"
+            value={locFilter}
+            onChange={(e) => setLocFilter(e.target.value)}
+            placeholder="Location…"
+            style={{
+              padding: "0.45rem 0.6rem",
+              border: "1px solid #f9a8d4",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+              width: "120px",
+              background: "#fff",
+              color: "#1f2937",
+            }}
+          />
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -569,7 +587,7 @@ export default function CandidateList({ candidates, hasJob, jobId, jobName }) {
                 fontSize: "0.9rem",
               }}
             >
-              No candidates with status “{filter}”.
+              No candidates match the current filters.
             </div>
           ) : null}
         </div>
