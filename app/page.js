@@ -113,7 +113,12 @@ export default async function Home() {
 
           {/* Right: candidates */}
           <div style={{ flex: "1 1 640px", minWidth: 0 }}>
-            <CandidateList candidates={candidates} hasJob={!!job} />
+            <CandidateList
+              candidates={candidates}
+              hasJob={!!job}
+              jobId={job?.id}
+              jobName={job ? (job.filename || "").replace(/\.[^.]+$/, "") : ""}
+            />
           </div>
         </div>
       </div>

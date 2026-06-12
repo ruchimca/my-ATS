@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { deleteCandidate, updateStage } from "./actions";
+import { deleteCandidate, updateStage, deleteLowMatches } from "./actions";
 import { STAGES } from "../lib/stages";
 import DeleteButton from "./DeleteButton";
 
@@ -32,6 +32,7 @@ const ALL_COLUMNS = [
   { key: "actions", label: "Resume / Delete" },
   { key: "title", label: "Title" },
   { key: "whyFit", label: "Why a great fit" },
+  { key: "gaps", label: "What's missing" },
   { key: "email", label: "Email" },
   { key: "phone", label: "Phone" },
   { key: "location", label: "Location" },
@@ -79,14 +80,20 @@ const th = {
 const tdBase = { padding: "0.6rem 0.7rem", verticalAlign: "top", color: "#374151" };
 function tdStyle(key) {
   if (key === "title") return { ...tdBase, minWidth: "140px", maxWidth: "190px" };
-  if (key === "whyFit") return { ...tdBase, minWidth: "200px", maxWidth: "300px" };
+  if (key === "whyFit" || key === "gaps")
+    return { ...tdBase, minWidth: "200px", maxWidth: "300px" };
   if (key === "name") return { ...tdBase, minWidth: "120px", fontWeight: 600 };
   if (["email", "phone", "actions"].includes(key))
     return { ...tdBase, whiteSpace: "nowrap" };
   return tdBase;
 }
 
-export default function CandidateList({ candidates, hasJob }) {
+function csvCell(v) {
+  const s = v == null ? "" : String(v);
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+export default function CandidateList({ candidates, hasJob, jobId, jobName }) {
   const router = useRouter();
   const [filter, setFilter] = useState("All");
   const [config, setConfig] = useState(DEFAULT_CONFIG);
@@ -157,6 +164,51 @@ export default function CandidateList({ candidates, hasJob }) {
     router.refresh();
   }
 
+  async function deleteLow() {
+    if (!jobId) return;
+    const below = candidates.filter(
+      (c) => Number.isFinite(c.fit_score) && c.fit_score < 8,
+    ).length;
+    if (below === 0) {
+      window.alert("No candidates are below an 8 for this job.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Delete ${below} candidate${below === 1 ? "" : "s"} scoring below 8 for this job? This can't be undone.`,
+      )
+    )
+      return;
+    const fd = new FormData();
+    fd.append("jobId", jobId);
+    await deleteLowMatches(fd);
+    router.refresh();
+  }
+
+  function exportCsv() {
+    const header = ["Candidate", "Email", "Rating (out of 10)", "Job Description"];
+    const rows = candidates.map((c) => [
+      c.name || "",
+      c.email || "",
+      Number.isFinite(c.fit_score) ? c.fit_score : "",
+      jobName || "",
+    ]);
+    const csv = [header, ...rows]
+      .map((r) => r.map(csvCell).join(","))
+      .join("\r\n");
+    const blob = new Blob(["﻿" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(jobName || "candidates").replace(/[^a-z0-9]+/gi, "_")}_candidates.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function renderCell(key, c) {
     switch (key) {
       case "fit": {
@@ -221,6 +273,8 @@ export default function CandidateList({ candidates, hasJob }) {
         return c.citizenship || "";
       case "whyFit":
         return c.fit_reason || "";
+      case "gaps":
+        return c.gaps || "";
       case "actions":
         return (
           <div
@@ -333,6 +387,42 @@ export default function CandidateList({ candidates, hasJob }) {
             }}
           >
             ⚙ Columns
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={candidates.length === 0}
+            style={{
+              padding: "0.45rem 0.7rem",
+              border: "1px solid #f9a8d4",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              background: "#fff",
+              color: PINK_DARK,
+              cursor: candidates.length === 0 ? "default" : "pointer",
+            }}
+            title="Download candidates as a CSV spreadsheet"
+          >
+            ⬇ Export
+          </button>
+          <button
+            type="button"
+            onClick={deleteLow}
+            disabled={!jobId}
+            style={{
+              padding: "0.45rem 0.7rem",
+              border: "1px solid #fca5a5",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              background: "#fff",
+              color: "#b91c1c",
+              cursor: jobId ? "pointer" : "default",
+            }}
+            title="Delete all candidates scoring below 8 for this job"
+          >
+            🗑 Delete below 8
           </button>
         </div>
       </div>

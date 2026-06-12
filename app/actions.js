@@ -7,6 +7,7 @@ import mammoth from "mammoth";
 import {
   addCandidateRow,
   deleteCandidateRow,
+  deleteCandidatesBelowScore,
   updateCandidateStage,
   getActiveJobDescription,
   getJobById,
@@ -29,6 +30,15 @@ export async function updateStage(formData) {
   const stage = (formData.get("stage") || "").toString();
   if (Number.isInteger(id) && STAGES.includes(stage)) {
     await updateCandidateStage(id, stage);
+    revalidatePath("/");
+  }
+}
+
+// Delete all candidates for a job that scored below 8.
+export async function deleteLowMatches(formData) {
+  const jobId = Number(formData.get("jobId"));
+  if (Number.isInteger(jobId)) {
+    await deleteCandidatesBelowScore(jobId, 8);
     revalidatePath("/");
   }
 }
@@ -164,13 +174,19 @@ function candidateToolAndInstruction(jdText) {
     };
     properties.fit_reason = {
       type: "string",
-      description: "One short sentence explaining the fit score.",
+      description:
+        "One short sentence on the candidate's key strengths for this role (why the score isn't lower).",
     };
-    required.push("fit_score", "fit_reason");
+    properties.gaps = {
+      type: "string",
+      description:
+        "One short sentence on the most important gaps or missing qualifications relative to the job — what the candidate lacks that keeps the score from being higher.",
+    };
+    required.push("fit_score", "fit_reason", "gaps");
   }
 
   const instruction = jdText
-    ? `Here is the JOB DESCRIPTION we are hiring for:\n\n${jdText}\n\nNow read the resume below. Extract the candidate's full name, email, current/most recent job title, phone number, location, desired pay/bill rate, and citizenship/work-authorization status (leave any of these blank if not present). Then rate from 1 to 10 how well this candidate fits the job description (10 = excellent fit) and give a one-sentence reason. Call save_candidate.`
+    ? `Here is the JOB DESCRIPTION we are hiring for:\n\n${jdText}\n\nNow read the resume below. Extract the candidate's full name, email, current/most recent job title, phone number, location, desired pay/bill rate, and citizenship/work-authorization status (leave any of these blank if not present). Then rate from 1 to 10 how well this candidate fits the job description (10 = excellent fit), give a one-sentence reason for the score (their strengths for this role), and a one-sentence summary of the most important gaps or missing qualifications (what they lack relative to the job). Call save_candidate.`
     : "Read the resume below. Extract the candidate's full name, email address, current or most recent job title, phone number, location, desired pay/bill rate, and citizenship/work-authorization status (leave any of these blank if not present), then call save_candidate.";
 
   const tool = {
@@ -310,6 +326,7 @@ export async function uploadResume(formData) {
     let role = null;
     let fitScore = null;
     let fitReason = null;
+    let gaps = null;
     let phone = null;
     let location = null;
     let rate = null;
@@ -349,6 +366,7 @@ export async function uploadResume(formData) {
           citizenship = pick(data.citizenship);
           if (Number.isFinite(data.fit_score)) fitScore = data.fit_score;
           fitReason = pick(data.fit_reason);
+          gaps = pick(data.gaps);
         }
       } catch (e) {
         aiError = e?.message || "AI read failed";
@@ -365,6 +383,7 @@ export async function uploadResume(formData) {
       resumeUrl: url,
       fitScore,
       fitReason,
+      gaps,
       phone,
       location,
       rate,
@@ -418,6 +437,7 @@ export async function submitApplication(formData) {
     let role = null;
     let fitScore = null;
     let fitReason = null;
+    let gaps = null;
     const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(filename);
     const isDocx = contentType === DOCX_MIME || /\.docx$/i.test(filename);
     if ((isPdf || isDocx) && process.env.ANTHROPIC_API_KEY) {
@@ -435,6 +455,7 @@ export async function submitApplication(formData) {
           if (Number.isFinite(data.fit_score)) fitScore = data.fit_score;
           if (data.fit_reason && data.fit_reason.trim())
             fitReason = data.fit_reason.trim();
+          if (data.gaps && data.gaps.trim()) gaps = data.gaps.trim();
         }
       } catch (e) {
         // keep the application even if AI reading fails
@@ -450,6 +471,7 @@ export async function submitApplication(formData) {
       resumeUrl: url,
       fitScore,
       fitReason,
+      gaps,
       phone,
       location,
       rate,
