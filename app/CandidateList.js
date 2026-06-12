@@ -186,11 +186,34 @@ export default function CandidateList({ candidates, hasJob, jobId, jobName }) {
   }
 
   function exportCsv() {
-    const header = ["Candidate", "Email", "Rating (out of 10)", "Job Description"];
+    const header = [
+      "Candidate",
+      "Email",
+      "Phone",
+      "Title",
+      "Rating (out of 10)",
+      "Status",
+      "Why a great fit",
+      "What's missing",
+      "Location",
+      "Rate",
+      "Citizenship",
+      "Resume URL",
+      "Job Description",
+    ];
     const rows = candidates.map((c) => [
       c.name || "",
       c.email || "",
+      c.phone || "",
+      c.role || "",
       Number.isFinite(c.fit_score) ? c.fit_score : "",
+      pendingStages[c.id] ?? c.stage ?? "Applied",
+      c.fit_reason || "",
+      c.gaps || "",
+      c.location || "",
+      c.rate || "",
+      c.citizenship || "",
+      c.resume_url || "",
       jobName || "",
     ]);
     const csv = [header, ...rows]
