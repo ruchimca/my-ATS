@@ -11,12 +11,13 @@ function isResume(file) {
   return /\.(pdf|doc|docx)$/i.test(file.name);
 }
 
-export default function UploadResumes() {
+export default function UploadResumes({ jobId }) {
   const inputRef = useRef(null);
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [imported, setImported] = useState(null); // count after a run finishes
+  const [skipped, setSkipped] = useState(0);
   const [issues, setIssues] = useState([]); // [{ msg, error: bool }]
   const [topError, setTopError] = useState("");
 
@@ -33,6 +34,7 @@ export default function UploadResumes() {
     setTopError("");
     setIssues([]);
     setImported(null);
+    setSkipped(0);
 
     const all = Array.from(e.target.files || []);
     const resumes = all.filter(isResume);
@@ -42,10 +44,15 @@ export default function UploadResumes() {
       return;
     }
 
+    // Pin this import to the job that's active right now, so switching the
+    // dropdown mid-import doesn't reroute resumes to another job.
+    const pinnedJobId = jobId;
+
     setBusy(true);
     setProgress({ done: 0, total: resumes.length });
 
     let ok = 0;
+    let rejected = 0;
     const found = [];
 
     for (let i = 0; i < resumes.length; i++) {
@@ -53,8 +60,15 @@ export default function UploadResumes() {
       try {
         const fd = new FormData();
         fd.append("file", file);
+        if (pinnedJobId) fd.append("jobId", pinnedJobId);
         const result = await uploadResume(fd);
-        if (result?.ok) {
+        if (result?.ok && result.skipped) {
+          rejected += 1;
+          found.push({
+            msg: `Rejected: ${result.name || file.name} — ${result.reason || "missing keyword"}`,
+            error: false,
+          });
+        } else if (result?.ok) {
           ok += 1;
           if (result.aiError) found.push({ msg: result.aiError, error: false });
         } else {
@@ -67,6 +81,7 @@ export default function UploadResumes() {
     }
 
     setImported(ok);
+    setSkipped(rejected);
     setIssues(found);
     setBusy(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -179,6 +194,9 @@ export default function UploadResumes() {
         >
           ✓ Imported {imported} of {progress.total} resume
           {progress.total === 1 ? "" : "s"}.
+          {skipped > 0
+            ? ` ${skipped} rejected (missing must-have keyword).`
+            : ""}
         </p>
       ) : null}
 

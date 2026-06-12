@@ -2,7 +2,12 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { uploadJobDescription, setActiveJob, deleteJob } from "./actions";
+import {
+  uploadJobDescription,
+  setActiveJob,
+  deleteJob,
+  setKeyword,
+} from "./actions";
 
 const PINK = "#db2777";
 const PINK_DARK = "#9d174d";
@@ -20,6 +25,27 @@ export default function JobDescription({ jobs = [], current }) {
   const [warning, setWarning] = useState("");
   const [copied, setCopied] = useState(false);
   const [applyUrl, setApplyUrl] = useState("");
+  const [keywordValue, setKeywordValue] = useState("");
+  const [savedKw, setSavedKw] = useState(false);
+
+  useEffect(() => {
+    setKeywordValue(current?.keyword || "");
+  }, [current?.id]);
+
+  async function saveKeyword() {
+    if (!current) return;
+    const fd = new FormData();
+    fd.append("jobId", current.id);
+    fd.append("keyword", keywordValue);
+    try {
+      await setKeyword(fd);
+      setSavedKw(true);
+      setTimeout(() => setSavedKw(false), 1500);
+    } catch (e) {
+      // ignore
+    }
+    router.refresh();
+  }
 
   useEffect(() => {
     if (current) {
@@ -198,6 +224,60 @@ export default function JobDescription({ jobs = [], current }) {
             </>
           ) : null}
         </p>
+      ) : null}
+
+      {current ? (
+        <div style={{ margin: "0 0 0.95rem" }}>
+          <label
+            style={{
+              display: "block",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              color: PINK_DARK,
+              marginBottom: "0.3rem",
+            }}
+          >
+            Must-have keywords (optional)
+          </label>
+          <div style={{ display: "flex", gap: "0.4rem" }}>
+            <input
+              value={keywordValue}
+              onChange={(e) => setKeywordValue(e.target.value)}
+              placeholder="e.g. M365, Azure, SharePoint"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: "0.5rem 0.6rem",
+                border: "1px solid #f9a8d4",
+                borderRadius: "8px",
+                fontSize: "0.85rem",
+                color: "#1f2937",
+                background: "#fff",
+              }}
+            />
+            <button
+              type="button"
+              onClick={saveKeyword}
+              style={{
+                background: savedKw ? "#dcfce7" : PINK,
+                color: savedKw ? "#166534" : "#fff",
+                border: savedKw ? "1px solid #86efac" : "none",
+                borderRadius: "8px",
+                padding: "0.5rem 0.8rem",
+                fontSize: "0.82rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {savedKw ? "✓ Saved" : "Save"}
+            </button>
+          </div>
+          <div style={{ fontSize: "0.74rem", color: "#9ca3af", marginTop: "0.3rem" }}>
+            Comma-separated. Imported resumes missing any of these are
+            auto-rejected. Leave blank for no filter.
+          </div>
+        </div>
       ) : null}
 
       <input

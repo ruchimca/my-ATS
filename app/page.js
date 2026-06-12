@@ -108,7 +108,7 @@ export default async function Home() {
           {/* Left: controls */}
           <div style={{ flex: "0 1 300px", minWidth: "280px" }}>
             <JobDescription jobs={jobs} current={job} />
-            <UploadResumes />
+            <UploadResumes jobId={job?.id} />
           </div>
 
           {/* Right: candidates */}

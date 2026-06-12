@@ -1,18 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
 import {
   addCandidateRow,
   deleteCandidateRow,
   deleteCandidatesBelowScore,
+  deleteAllCandidatesForJob,
   updateCandidateStage,
   getActiveJobDescription,
   getJobById,
   saveJobDescription,
   setActiveJobById,
+  setJobKeyword,
   deleteJobById,
 } from "../lib/db";
 import { STAGES } from "../lib/stages";
@@ -39,6 +41,25 @@ export async function deleteLowMatches(formData) {
   const jobId = Number(formData.get("jobId"));
   if (Number.isInteger(jobId)) {
     await deleteCandidatesBelowScore(jobId, 8);
+    revalidatePath("/");
+  }
+}
+
+// Delete every candidate for a job (clear the list).
+export async function clearJobCandidates(formData) {
+  const jobId = Number(formData.get("jobId"));
+  if (Number.isInteger(jobId)) {
+    await deleteAllCandidatesForJob(jobId);
+    revalidatePath("/");
+  }
+}
+
+// Set (or clear) a job's required "must-have" keywords (comma-separated).
+export async function setKeyword(formData) {
+  const jobId = Number(formData.get("jobId"));
+  const keyword = (formData.get("keyword") || "").toString().trim();
+  if (Number.isInteger(jobId)) {
+    await setJobKeyword(jobId, keyword);
     revalidatePath("/");
   }
 }
@@ -130,7 +151,7 @@ async function extractJdText(base64) {
 }
 
 // Build the tool + instruction for candidate extraction (and optional scoring).
-function candidateToolAndInstruction(jdText) {
+function candidateToolAndInstruction(jdText, keyword) {
   const properties = {
     name: { type: "string", description: "The candidate's full name." },
     email: {
@@ -185,9 +206,21 @@ function candidateToolAndInstruction(jdText) {
     required.push("fit_score", "fit_reason", "gaps");
   }
 
-  const instruction = jdText
+  if (keyword) {
+    properties.keyword_present = {
+      type: "boolean",
+      description: `Whether the resume contains ALL of these required terms (comma-separated): ${keyword}. True only if every one is present (an obvious variant/abbreviation counts).`,
+    };
+    required.push("keyword_present");
+  }
+
+  let instruction = jdText
     ? `Here is the JOB DESCRIPTION we are hiring for:\n\n${jdText}\n\nNow read the resume below. Extract the candidate's full name, email, current/most recent job title, phone number, location, desired pay/bill rate, and citizenship/work-authorization status (leave any of these blank if not present). Then rate from 1 to 10 how well this candidate fits the job description (10 = excellent fit), give a one-sentence reason for the score (their strengths for this role), and a one-sentence summary of the most important gaps or missing qualifications (what they lack relative to the job). Call save_candidate.`
     : "Read the resume below. Extract the candidate's full name, email address, current or most recent job title, phone number, location, desired pay/bill rate, and citizenship/work-authorization status (leave any of these blank if not present), then call save_candidate.";
+
+  if (keyword) {
+    instruction += ` Also set keyword_present to true ONLY if the resume contains ALL of these required terms (comma-separated): ${keyword}. If any one is missing, set it to false.`;
+  }
 
   const tool = {
     name: "save_candidate",
@@ -203,9 +236,9 @@ function candidateToolAndInstruction(jdText) {
 }
 
 // Run the extraction given the resume content blocks (a PDF document, or text).
-async function runCandidateExtraction(resumeBlocks, jdText) {
+async function runCandidateExtraction(resumeBlocks, jdText, keyword) {
   const client = new Anthropic();
-  const { tool, instruction } = candidateToolAndInstruction(jdText);
+  const { tool, instruction } = candidateToolAndInstruction(jdText, keyword);
   const message = await client.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 1024,
@@ -223,15 +256,16 @@ async function runCandidateExtraction(resumeBlocks, jdText) {
 }
 
 // Read a resume PDF (vision) → structured fields + optional fit score.
-async function extractFromPdf(base64, jdText) {
-  return runCandidateExtraction([pdfDocumentBlock(base64)], jdText);
+async function extractFromPdf(base64, jdText, keyword) {
+  return runCandidateExtraction([pdfDocumentBlock(base64)], jdText, keyword);
 }
 
 // Read resume text (from a .docx) → structured fields + optional fit score.
-async function extractFromText(text, jdText) {
+async function extractFromText(text, jdText, keyword) {
   return runCandidateExtraction(
     [{ type: "text", text: `RESUME:\n\n${text.slice(0, 30000)}` }],
     jdText,
+    keyword,
   );
 }
 
@@ -306,7 +340,12 @@ export async function uploadResume(formData) {
   const contentType = file.type || "";
 
   try {
-    const job = await getActiveJobDescription();
+    // Pin the import to the job that was active when it started, so switching
+    // the dropdown mid-import doesn't reroute resumes to the wrong job.
+    const pinnedJobId = Number(formData.get("jobId"));
+    const job = Number.isInteger(pinnedJobId)
+      ? await getJobById(pinnedJobId)
+      : await getActiveJobDescription();
     if (!job) {
       return { ok: false, error: "Choose a job description first." };
     }
@@ -320,6 +359,8 @@ export async function uploadResume(formData) {
       contentType: contentType || undefined,
     });
 
+    const keyword = (job.keyword || "").trim();
+
     // 2. Extract fields (and score against the job description, if set).
     let name = filenameToName(filename);
     let email = null;
@@ -332,6 +373,8 @@ export async function uploadResume(formData) {
     let rate = null;
     let citizenship = null;
     let aiError = null;
+    let docxText = null;
+    let data = null;
 
     const pick = (v) => (v && v.trim() ? v.trim() : null);
 
@@ -341,6 +384,14 @@ export async function uploadResume(formData) {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
       /\.docx$/i.test(filename);
 
+    if (isDocx) {
+      try {
+        docxText = await extractDocxText(buffer);
+      } catch (e) {
+        // handled by the AI branch / fallbacks below
+      }
+    }
+
     if (!isPdf && !isDocx) {
       aiError = "unsupported file type — used file name (use PDF or .docx)";
     } else if (!process.env.ANTHROPIC_API_KEY) {
@@ -348,13 +399,11 @@ export async function uploadResume(formData) {
     } else {
       try {
         const jdText = job.content || null;
-        let data;
         if (isPdf) {
-          data = await extractFromPdf(buffer.toString("base64"), jdText);
+          data = await extractFromPdf(buffer.toString("base64"), jdText, keyword || null);
         } else {
-          const text = await extractDocxText(buffer);
-          if (!text) throw new Error("no readable text in the Word file");
-          data = await extractFromText(text, jdText);
+          if (!docxText) throw new Error("no readable text in the Word file");
+          data = await extractFromText(docxText, jdText, keyword || null);
         }
         if (data) {
           if (data.name && data.name.trim()) name = data.name.trim();
@@ -370,6 +419,37 @@ export async function uploadResume(formData) {
         }
       } catch (e) {
         aiError = e?.message || "AI read failed";
+      }
+    }
+
+    // 2b. Required-keyword screen: reject resumes missing any must-have term.
+    if (keyword) {
+      const terms = keyword
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      let present = true;
+      let missing = [];
+      if (terms.length > 0) {
+        if (docxText) {
+          const lower = docxText.toLowerCase();
+          missing = terms.filter((t) => !lower.includes(t.toLowerCase()));
+          present = missing.length === 0;
+        } else if (data && typeof data.keyword_present === "boolean") {
+          present = data.keyword_present;
+        }
+      }
+      if (!present) {
+        try {
+          await del(url);
+        } catch (e) {
+          // best-effort cleanup of the uploaded file
+        }
+        const reason =
+          missing.length > 0
+            ? `missing: ${missing.join(", ")}`
+            : "missing required keyword(s)";
+        return { ok: true, skipped: true, name, reason };
       }
     }
 

@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { deleteCandidate, updateStage, deleteLowMatches } from "./actions";
+import {
+  deleteCandidate,
+  updateStage,
+  deleteLowMatches,
+  clearJobCandidates,
+} from "./actions";
 import { STAGES } from "../lib/stages";
 import DeleteButton from "./DeleteButton";
 
@@ -185,6 +190,21 @@ export default function CandidateList({ candidates, hasJob, jobId, jobName }) {
     const fd = new FormData();
     fd.append("jobId", jobId);
     await deleteLowMatches(fd);
+    router.refresh();
+  }
+
+  async function clearAll() {
+    if (!jobId) return;
+    if (candidates.length === 0) return;
+    if (
+      !window.confirm(
+        `Delete ALL ${candidates.length} candidate${candidates.length === 1 ? "" : "s"} for this job? This clears the list so you can start over. This can't be undone.`,
+      )
+    )
+      return;
+    const fd = new FormData();
+    fd.append("jobId", jobId);
+    await clearJobCandidates(fd);
     router.refresh();
   }
 
@@ -464,6 +484,25 @@ export default function CandidateList({ candidates, hasJob, jobId, jobName }) {
             title="Delete all candidates scoring below 8 for this job"
           >
             🗑 Delete below 8
+          </button>
+          <button
+            type="button"
+            onClick={clearAll}
+            disabled={!jobId || candidates.length === 0}
+            style={{
+              padding: "0.45rem 0.7rem",
+              border: "1px solid #fca5a5",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              background: "#fff",
+              color: "#b91c1c",
+              cursor:
+                !jobId || candidates.length === 0 ? "default" : "pointer",
+            }}
+            title="Delete all candidates for this job"
+          >
+            🗑 Clear all
           </button>
         </div>
       </div>
