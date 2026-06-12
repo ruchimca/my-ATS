@@ -108,7 +108,10 @@ export default async function Home() {
           {/* Left: controls */}
           <div style={{ flex: "0 1 300px", minWidth: "280px" }}>
             <JobDescription jobs={jobs} current={job} />
-            <UploadResumes jobId={job?.id} />
+            <UploadResumes
+              jobId={job?.id}
+              hasKeyword={!!(job?.keyword && job.keyword.trim())}
+            />
           </div>
 
           {/* Right: candidates */}

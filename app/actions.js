@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { put, del } from "@vercel/blob";
 import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
+import { PDFParse } from "pdf-parse";
 import {
   addCandidateRow,
   deleteCandidateRow,
@@ -64,6 +65,54 @@ export async function setKeyword(formData) {
   }
 }
 
+// Pass 1 (free, no AI): does this resume contain ALL the job's must-have
+// keywords? Reads the file text locally and substring-checks. No upload, no AI.
+export async function screenResume(formData) {
+  const file = formData.get("file");
+  if (!file || typeof file === "string") {
+    return { pass: false, error: "No file received." };
+  }
+  const filename = file.name || "resume";
+  const contentType = file.type || "";
+  const name = filenameToName(filename);
+
+  const pinnedJobId = Number(formData.get("jobId"));
+  const job = Number.isInteger(pinnedJobId)
+    ? await getJobById(pinnedJobId)
+    : await getActiveJobDescription();
+
+  const keyword = (job?.keyword || "").trim();
+  const terms = keyword
+    ? keyword.split(",").map((t) => t.trim()).filter(Boolean)
+    : [];
+  if (terms.length === 0) return { pass: true, name };
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(filename);
+    const isDocx = contentType === DOCX_MIME || /\.docx$/i.test(filename);
+    let text = "";
+    if (isDocx) text = await extractDocxText(buffer);
+    else if (isPdf) text = await extractPdfText(buffer);
+    else {
+      return { pass: false, name, missing: terms, reason: "unsupported file type" };
+    }
+
+    const lower = (text || "").toLowerCase();
+    const missing = terms.filter((t) => !lower.includes(t.toLowerCase()));
+    return missing.length === 0
+      ? { pass: true, name }
+      : { pass: false, name, missing };
+  } catch (e) {
+    return {
+      pass: false,
+      name,
+      missing: terms,
+      reason: e?.message || "could not read file",
+    };
+  }
+}
+
 // Switch which job description is active (the one new resumes are scored
 // against and whose candidates are shown).
 export async function setActiveJob(formData) {
@@ -99,10 +148,20 @@ function pdfDocumentBlock(base64) {
   };
 }
 
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 // Pull plain text out of a Word (.docx) file.
 async function extractDocxText(buffer) {
   const { value } = await mammoth.extractRawText({ buffer });
   return (value || "").trim();
+}
+
+// Pull plain text out of a PDF — no AI. Used for the free keyword pass.
+async function extractPdfText(buffer) {
+  const parser = new PDFParse({ data: buffer });
+  const result = await parser.getText();
+  return (result?.text || "").trim();
 }
 
 // Summarize job-description text (from a .docx) into a concise plain-text brief.
@@ -359,7 +418,9 @@ export async function uploadResume(formData) {
       contentType: contentType || undefined,
     });
 
-    const keyword = (job.keyword || "").trim();
+    // Pass 2 sets skipKeyword=1 because Pass 1 already screened by keyword.
+    const skipKeyword = formData.get("skipKeyword") === "1";
+    const keyword = skipKeyword ? "" : (job.keyword || "").trim();
 
     // 2. Extract fields (and score against the job description, if set).
     let name = filenameToName(filename);
