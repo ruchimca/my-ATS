@@ -50,11 +50,14 @@ export default function UploadResumes({ jobId, hasKeyword }) {
   const inputRef = useRef(null);
   const router = useRouter();
 
-  const [phase, setPhase] = useState("idle"); // idle | pass1 | pass2 | done
+  // idle | screening | screened | scoring | done
+  const [phase, setPhase] = useState("idle");
   const [p1, setP1] = useState({ done: 0, total: 0 });
   const [p2, setP2] = useState({ done: 0, total: 0 });
+  const [survivors, setSurvivors] = useState([]);
+  const [pinned, setPinned] = useState(null);
   const [matched, setMatched] = useState(0);
-  const [rejected, setRejected] = useState(0);
+  const [rejectedCount, setRejectedCount] = useState(0);
   const [imported, setImported] = useState(0);
   const [issues, setIssues] = useState([]);
   const [topError, setTopError] = useState("");
@@ -67,101 +70,111 @@ export default function UploadResumes({ jobId, hasKeyword }) {
     }
   }
 
-  async function handleFiles(e) {
+  // ----- Pass 1: pick the folder and screen by keyword (free) -----
+  async function handlePickFolder(e) {
     setTopError("");
     setIssues([]);
-    setMatched(0);
-    setRejected(0);
     setImported(0);
+    setMatched(0);
+    setRejectedCount(0);
+    setSurvivors([]);
 
-    const all = Array.from(e.target.files || []);
-    const resumes = all.filter(isResume);
+    const resumes = Array.from(e.target.files || []).filter(isResume);
+    if (inputRef.current) inputRef.current.value = "";
     if (resumes.length === 0) {
       setTopError("No PDF or Word resumes found in that folder.");
+      setPhase("idle");
       return;
     }
 
-    const pinnedJobId = jobId; // pin the import to the current job
-    const found = [];
-    let survivors = resumes;
+    const pinnedJobId = jobId;
+    setPinned(pinnedJobId);
 
-    // ----- Pass 1: free keyword screen (only if a keyword is set) -----
-    if (hasKeyword) {
-      setPhase("pass1");
-      setP1({ done: 0, total: resumes.length });
-      survivors = [];
-      let rej = 0;
-      for (let i = 0; i < resumes.length; i++) {
-        const file = resumes[i];
-        try {
-          const fd = new FormData();
-          fd.append("file", file);
-          if (pinnedJobId) fd.append("jobId", pinnedJobId);
-          const r = await screenResume(fd);
-          if (r?.pass) {
-            survivors.push(file);
-          } else {
-            rej += 1;
-            const miss =
-              r?.missing && r.missing.length
-                ? ` — missing: ${r.missing.join(", ")}`
-                : r?.reason
-                  ? ` — ${r.reason}`
-                  : "";
-            found.push({
-              msg: `Rejected: ${r?.name || file.name}${miss}`,
-              error: false,
-            });
-          }
-        } catch (err) {
-          found.push({
-            msg: `${file.name} — keyword check failed`,
-            error: true,
-          });
-        }
-        setP1({ done: i + 1, total: resumes.length });
-      }
-      setMatched(survivors.length);
-      setRejected(rej);
+    if (!hasKeyword) {
+      // No keyword set → nothing to screen; everything advances to Pass 2.
+      setSurvivors(resumes);
+      setMatched(resumes.length);
+      setRejectedCount(0);
+      setPhase("screened");
+      return;
     }
 
-    // ----- Pass 2: AI scoring on survivors only -----
-    setPhase("pass2");
+    setPhase("screening");
+    setP1({ done: 0, total: resumes.length });
+    const survs = [];
+    const found = [];
+    let rej = 0;
+    for (let i = 0; i < resumes.length; i++) {
+      const file = resumes[i];
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        if (pinnedJobId) fd.append("jobId", pinnedJobId);
+        const r = await screenResume(fd);
+        if (r?.pass) {
+          survs.push(file);
+        } else {
+          rej += 1;
+          const miss =
+            r?.missing && r.missing.length
+              ? ` — missing: ${r.missing.join(", ")}`
+              : r?.reason
+                ? ` — ${r.reason}`
+                : "";
+          found.push({ msg: `Rejected: ${r?.name || file.name}${miss}`, error: false });
+        }
+      } catch (err) {
+        found.push({ msg: `${file.name} — keyword check failed`, error: true });
+      }
+      setP1({ done: i + 1, total: resumes.length });
+    }
+    setSurvivors(survs);
+    setMatched(survs.length);
+    setRejectedCount(rej);
+    setIssues(found);
+    setPhase("screened");
+  }
+
+  // ----- Pass 2: AI-score the survivors -----
+  async function runPass2() {
+    if (survivors.length === 0) return;
+    setPhase("scoring");
     setP2({ done: 0, total: survivors.length });
+    const newIssues = [];
     let ok = 0;
     for (let j = 0; j < survivors.length; j++) {
       const file = survivors[j];
       try {
         const fd = new FormData();
         fd.append("file", file);
-        if (pinnedJobId) fd.append("jobId", pinnedJobId);
+        if (pinned) fd.append("jobId", pinned);
         if (hasKeyword) fd.append("skipKeyword", "1");
         const r = await uploadResume(fd);
         if (r?.ok && r.skipped) {
-          found.push({
+          newIssues.push({
             msg: `Rejected: ${r.name || file.name} — ${r.reason || "missing keyword"}`,
             error: false,
           });
         } else if (r?.ok) {
           ok += 1;
-          if (r.aiError) found.push({ msg: r.aiError, error: false });
+          if (r.aiError) newIssues.push({ msg: r.aiError, error: false });
         } else {
-          found.push({ msg: r?.error || "Upload failed", error: true });
+          newIssues.push({ msg: r?.error || "Upload failed", error: true });
         }
       } catch (err) {
-        found.push({ msg: err?.message || "Upload failed", error: true });
+        newIssues.push({ msg: err?.message || "Upload failed", error: true });
       }
       setP2({ done: j + 1, total: survivors.length });
     }
-
     setImported(ok);
-    setIssues(found);
+    setIssues((prev) => [...prev, ...newIssues]);
     setPhase("done");
-    if (inputRef.current) inputRef.current.value = "";
     router.refresh();
   }
 
-  const busy = phase === "pass1" || phase === "pass2";
+  const pass1Busy = phase === "screening";
+  const pass2Busy = phase === "scoring";
+  const canPass2 = phase === "screened" && survivors.length > 0;
 
   // Group repeated messages.
   const grouped = [];
@@ -174,6 +187,19 @@ export default function UploadResumes({ jobId, hasKeyword }) {
     }
   }
   const errorCount = issues.filter((i) => i.error).length;
+
+  const btn = (bg, color, disabled) => ({
+    display: "inline-block",
+    background: bg,
+    color,
+    border: "none",
+    borderRadius: "8px",
+    padding: "0.65rem 1.2rem",
+    fontSize: "0.92rem",
+    fontWeight: 600,
+    cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? 0.7 : 1,
+  });
 
   return (
     <section
@@ -190,10 +216,10 @@ export default function UploadResumes({ jobId, hasKeyword }) {
         Import a folder of resumes
       </h2>
       <p style={{ margin: "0 0 1rem", color: "#6b7280", fontSize: "0.9rem" }}>
-        Pick a folder of resumes (PDF or Word .docx).
-        {hasKeyword
-          ? " Pass 1 keeps only resumes with your must-have keywords (free); Pass 2 then AI-scores those."
-          : " Each one is read by the AI to fill in name, email, role, and fit score."}
+        <strong>Pass 1</strong> picks a folder and keeps only resumes with your
+        must-have keywords (free).{" "}
+        <strong>Pass 2</strong> then AI-scores just those matches.
+        {hasKeyword ? "" : " (No keyword saved — Pass 1 will pass everything.)"}
       </p>
 
       <input
@@ -201,75 +227,63 @@ export default function UploadResumes({ jobId, hasKeyword }) {
         type="file"
         multiple
         accept=".pdf,.doc,.docx"
-        onChange={handleFiles}
-        disabled={busy}
+        onChange={handlePickFolder}
+        disabled={pass1Busy || pass2Busy}
         style={{ display: "none" }}
         id="resume-folder-input"
       />
-      <label
-        htmlFor="resume-folder-input"
-        style={{
-          display: "inline-block",
-          background: busy ? "#f9a8d4" : PINK,
-          color: "#fff",
-          borderRadius: "8px",
-          padding: "0.65rem 1.4rem",
-          fontSize: "0.95rem",
-          fontWeight: 600,
-          cursor: busy ? "default" : "pointer",
-        }}
-      >
-        {phase === "pass1"
-          ? "Pass 1 — keyword screen…"
-          : phase === "pass2"
-            ? "Pass 2 — AI scoring…"
-            : "📁 Choose a folder of resumes"}
-      </label>
 
-      {/* Live progress */}
-      {phase === "pass1" ? (
-        <ProgressBar
-          done={p1.done}
-          total={p1.total}
-          label="Pass 1 — keyword screen:"
-        />
+      <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+        <label
+          htmlFor="resume-folder-input"
+          style={btn(
+            pass1Busy ? "#f9a8d4" : PINK,
+            "#fff",
+            pass1Busy || pass2Busy,
+          )}
+        >
+          {pass1Busy ? "Pass 1 — screening…" : "📁 Pass 1: choose folder"}
+        </label>
+        <button
+          type="button"
+          onClick={runPass2}
+          disabled={!canPass2 || pass2Busy}
+          style={btn(
+            canPass2 && !pass2Busy ? PINK : "#f3c6dd",
+            "#fff",
+            !canPass2 || pass2Busy,
+          )}
+        >
+          {pass2Busy
+            ? "Pass 2 — scoring…"
+            : `Pass 2: AI-score ${survivors.length || ""} match${survivors.length === 1 ? "" : "es"}`}
+        </button>
+      </div>
+
+      {/* Pass 1 progress */}
+      {phase === "screening" ? (
+        <ProgressBar done={p1.done} total={p1.total} label="Pass 1 — keyword screen:" />
       ) : null}
-      {phase === "pass2" ? (
-        <>
-          {hasKeyword ? (
-            <p
-              style={{
-                marginTop: "1rem",
-                fontSize: "0.85rem",
-                color: "#166534",
-                fontWeight: 600,
-              }}
-            >
-              Pass 1 done: {matched} matched, {rejected} rejected.
-            </p>
-          ) : null}
-          <ProgressBar
-            done={p2.done}
-            total={p2.total}
-            label="Pass 2 — AI scoring:"
-          />
-        </>
+
+      {/* Pass 1 result (ready for Pass 2) */}
+      {phase === "screened" ? (
+        <p style={{ marginTop: "1rem", fontSize: "0.92rem", color: "#166534", fontWeight: 600 }}>
+          ✓ Pass 1 done: {matched} matched
+          {hasKeyword ? `, ${rejectedCount} rejected` : ""}. Now click{" "}
+          <strong>Pass 2</strong> to AI-score the {matched}.
+        </p>
+      ) : null}
+
+      {/* Pass 2 progress */}
+      {phase === "scoring" ? (
+        <ProgressBar done={p2.done} total={p2.total} label="Pass 2 — AI scoring:" />
       ) : null}
 
       {/* Final summary */}
       {phase === "done" ? (
-        <p
-          style={{
-            marginTop: "1rem",
-            fontSize: "0.95rem",
-            fontWeight: 600,
-            color: "#166534",
-          }}
-        >
-          ✓ Imported {imported}
-          {hasKeyword
-            ? ` of ${matched} keyword matches (${rejected} rejected in Pass 1).`
-            : "."}
+        <p style={{ marginTop: "1rem", fontSize: "0.95rem", fontWeight: 600, color: "#166534" }}>
+          ✓ Imported {imported} of {matched} match{matched === 1 ? "" : "es"}
+          {hasKeyword ? ` (${rejectedCount} rejected in Pass 1).` : "."}
         </p>
       ) : null}
 
@@ -299,18 +313,9 @@ export default function UploadResumes({ jobId, hasKeyword }) {
               marginBottom: "0.4rem",
             }}
           >
-            {errorCount
-              ? `${errorCount} had a problem`
-              : "Rejected / needs attention"}
+            {errorCount ? `${errorCount} had a problem` : "Rejected / needs attention"}
           </div>
-          <ul
-            style={{
-              margin: 0,
-              paddingLeft: "1.1rem",
-              fontSize: "0.82rem",
-              color: "#374151",
-            }}
-          >
+          <ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "0.82rem", color: "#374151" }}>
             {grouped.map((g, i) => (
               <li key={i} style={{ color: g.error ? "#991b1b" : "#92400e" }}>
                 {g.msg}
