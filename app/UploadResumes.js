@@ -274,6 +274,44 @@ export default function UploadResumes({ jobId, hasKeyword }) {
         </p>
       ) : null}
 
+      {/* List of matched resumes from Pass 1 */}
+      {(phase === "screened" || phase === "scoring") && survivors.length > 0 ? (
+        <div
+          style={{
+            marginTop: "0.75rem",
+            border: "1px solid #86efac",
+            background: "#f0fdf4",
+            borderRadius: "10px",
+            padding: "0.75rem 1rem",
+            maxHeight: "200px",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: "0.82rem",
+              color: "#166534",
+              marginBottom: "0.4rem",
+            }}
+          >
+            ✓ Matched resumes ({survivors.length}) — these go to Pass 2
+          </div>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: "1.1rem",
+              fontSize: "0.82rem",
+              color: "#374151",
+            }}
+          >
+            {survivors.map((f, i) => (
+              <li key={i}>{f.name}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {/* Pass 2 progress */}
       {phase === "scoring" ? (
         <ProgressBar done={p2.done} total={p2.total} label="Pass 2 — AI scoring:" />
